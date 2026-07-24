@@ -960,10 +960,18 @@ window.renderReportCharts = renderReportCharts;
 
 function closeReportModal() {
     document.getElementById('aiModal').classList.remove('open');
-    // 销毁图表实例，避免内存泄漏
-    if (window.reportChart1) { window.reportChart1.destroy(); window.reportChart1 = null; }
-    if (window.reportChart2) { window.reportChart2.destroy(); window.reportChart2 = null; }
-    if (window.reportChart3) { window.reportChart3.destroy(); window.reportChart3 = null; }
+    if (window.reportChart1 && typeof window.reportChart1.destroy === 'function') {
+        window.reportChart1.destroy();
+        window.reportChart1 = null;
+    }
+    if (window.reportChart2 && typeof window.reportChart2.destroy === 'function') {
+        window.reportChart2.destroy();
+        window.reportChart2 = null;
+    }
+    if (window.reportChart3 && typeof window.reportChart3.destroy === 'function') {
+        window.reportChart3.destroy();
+        window.reportChart3 = null;
+    }
 }
 window.closeReportModal = closeReportModal;
 </script>
