@@ -595,18 +595,26 @@ window.renderDoctorReportCharts = renderDoctorReportCharts;
 // ── 关闭报告弹窗 ──────────────────────────────────────────
 function closeReportModal() {
     document.getElementById('aiModal').classList.remove('open');
-    if (window.reportChart1 && typeof window.reportChart1.destroy === 'function') {
-        window.reportChart1.destroy();
-        window.reportChart1 = null;
-    }
-    if (window.reportChart2 && typeof window.reportChart2.destroy === 'function') {
-        window.reportChart2.destroy();
-        window.reportChart2 = null;
-    }
-    if (window.reportChart3 && typeof window.reportChart3.destroy === 'function') {
-        window.reportChart3.destroy();
-        window.reportChart3 = null;
-    }
+    // 直接删除 canvas 元素，让浏览器自动清理
+    const charts = ['reportChart1', 'reportChart2', 'reportChart3'];
+    charts.forEach(id => {
+        const canvas = document.getElementById(id);
+        if (canvas) {
+            // 移除 canvas 的父元素重新创建，彻底清除图表实例
+            const parent = canvas.parentNode;
+            if (parent) {
+                const newCanvas = document.createElement('canvas');
+                newCanvas.id = id;
+                newCanvas.style.height = '100px';
+                newCanvas.style.width = '100%';
+                parent.replaceChild(newCanvas, canvas);
+            }
+        }
+    });
+    // 清空全局引用
+    window.reportChart1 = null;
+    window.reportChart2 = null;
+    window.reportChart3 = null;
 }
 window.closeReportModal = closeReportModal;
 </script>
