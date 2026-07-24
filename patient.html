@@ -791,7 +791,7 @@ ${recentHistory}
 
     try {
         // 改为调用 Cloudflare Worker
-        const resp = await fetch('/api/chat', {
+        const resp = await fetch('https://renyun-zhihu-rehab-monitor.onrender.com/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
