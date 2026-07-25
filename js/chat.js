@@ -67,6 +67,22 @@ function initChat(role) {
     }
     .msg-row.mine .msg-bubble{
         background:#2563eb;color:#fff;border-bottom-right-radius:4px;
+        cursor:pointer;position:relative;
+    }
+    .msg-recall-tip{
+        position:absolute;bottom:-32px;right:0;background:#1e293b;color:#fff;
+        font-size:11px;padding:4px 10px;border-radius:6px;white-space:nowrap;
+        cursor:pointer;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,0.2);
+        display:none;
+    }
+    .msg-recall-tip::after{
+        content:'';position:absolute;top:-5px;right:12px;
+        border-left:5px solid transparent;border-right:5px solid transparent;
+        border-bottom:5px solid #1e293b;
+    }
+    .msg-recalled{
+        font-style:italic;color:#94a3b8 !important;background:#f1f5f9 !important;
+        border:1px dashed #cbd5e1 !important;
     }
     .msg-row.theirs .msg-bubble{
         background:#fff;color:#1e293b;border:1px solid #e9f0fa;
@@ -198,9 +214,70 @@ function initChat(role) {
     const fab = document.createElement('button');
     fab.className = 'chat-fab';
     fab.id = 'chatFab';
-    fab.title = '聊天';
+    fab.title = '双击打开聊天';
     fab.innerHTML = '💬<span class="chat-unread-dot" id="chatUnreadDot"></span>';
-    fab.onclick = _openChat;
+
+    // Draggable FAB: single click/drag = move, double click = open
+    let _fabDragging = false, _fabMoved = false, _fabStartX = 0, _fabStartY = 0, _fabOrigX = 0, _fabOrigY = 0;
+    fab.addEventListener('mousedown', function(e) {
+        _fabDragging = true; _fabMoved = false;
+        _fabStartX = e.clientX; _fabStartY = e.clientY;
+        const rect = fab.getBoundingClientRect();
+        _fabOrigX = rect.left; _fabOrigY = rect.top;
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!_fabDragging) return;
+        const dx = e.clientX - _fabStartX, dy = e.clientY - _fabStartY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) _fabMoved = true;
+        if (_fabMoved) {
+            fab.style.position = 'fixed';
+            fab.style.left = (_fabOrigX + dx) + 'px';
+            fab.style.top = (_fabOrigY + dy) + 'px';
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+        }
+    });
+    document.addEventListener('mouseup', function() { _fabDragging = false; });
+    fab.addEventListener('touchstart', function(e) {
+        _fabDragging = true; _fabMoved = false;
+        const t = e.touches[0];
+        _fabStartX = t.clientX; _fabStartY = t.clientY;
+        const rect = fab.getBoundingClientRect();
+        _fabOrigX = rect.left; _fabOrigY = rect.top;
+    }, {passive: true});
+    document.addEventListener('touchmove', function(e) {
+        if (!_fabDragging) return;
+        const t = e.touches[0];
+        const dx = t.clientX - _fabStartX, dy = t.clientY - _fabStartY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) _fabMoved = true;
+        if (_fabMoved) {
+            fab.style.position = 'fixed';
+            fab.style.left = (_fabOrigX + dx) + 'px';
+            fab.style.top = (_fabOrigY + dy) + 'px';
+            fab.style.right = 'auto';
+            fab.style.bottom = 'auto';
+        }
+    }, {passive: true});
+    document.addEventListener('touchend', function() { _fabDragging = false; });
+    fab.addEventListener('dblclick', function(e) {
+        e.preventDefault();
+        _openChat();
+    });
+    // Double-tap support for mobile
+    let _lastTapTime = 0;
+    fab.addEventListener('touchend', function(e) {
+        if (_fabMoved) return;
+        const now = Date.now();
+        if (now - _lastTapTime < 350) {
+            e.preventDefault();
+            _openChat();
+            _lastTapTime = 0;
+        } else {
+            _lastTapTime = now;
+        }
+    });
+    fab.onclick = null;
 
     const panel = document.createElement('div');
     panel.className = 'chat-panel';
@@ -243,6 +320,7 @@ function initChat(role) {
         if (inp) inp.focus();
         _updateUnread();
     }
+    window._openChat = _openChat;
 
     window._closeChat = function() {
         document.getElementById('chatPanel').classList.remove('open');
@@ -307,6 +385,28 @@ function initChat(role) {
         window._autoResize(inp);
     };
 
+    window._showRecall = function(event, msgId) {
+        event.stopPropagation();
+        document.querySelectorAll('.msg-recall-tip').forEach(el => el.style.display = 'none');
+        const tip = event.currentTarget.querySelector(`.msg-recall-tip[data-msgid="${msgId}"]`);
+        if (tip) tip.style.display = 'block';
+        setTimeout(() => { if (tip) tip.style.display = 'none'; }, 3000);
+    };
+
+    window._recallMsg = function(msgId) {
+        const msg = (DB.messages||[]).find(m => m.id === msgId);
+        if (!msg) return;
+        if (msg.fromRole !== role) return;
+        msg.recalled = true;
+        msg.text = '';
+        saveDB();
+        _renderMsgs(_activePid);
+    };
+
+    document.addEventListener('click', function() {
+        document.querySelectorAll('.msg-recall-tip').forEach(el => el.style.display = 'none');
+    });
+
     window._toggleReminderBar = function() {
         const bar = document.getElementById('chatReminderBar');
         if (bar) bar.classList.toggle('visible');
@@ -364,14 +464,23 @@ function initChat(role) {
         container.innerHTML = msgs.map(m => {
             const isMine = m.fromRole === role;
             let content = '';
+            if (m.recalled) {
+                content = '此消息已撤回';
+                return `<div class="msg-row ${isMine?'mine':'theirs'}">
+                    ${!isMine ? `<div class="msg-sender">${_esc(m.fromName)}</div>` : ''}
+                    <div class="msg-bubble msg-recalled">${content}</div>
+                    <div class="msg-meta">${m.time}</div>
+                </div>`;
+            }
             if (m.type === 'image') {
                 content = `<img src="${m.text}" alt="图片"/>`;
             } else {
                 content = _esc(m.text);
             }
+            const recallBtn = isMine ? `<span class="msg-recall-tip" data-msgid="${m.id}" onclick="_recallMsg('${m.id}')">撤回</span>` : '';
             return `<div class="msg-row ${isMine?'mine':'theirs'}">
                 ${!isMine ? `<div class="msg-sender">${_esc(m.fromName)}</div>` : ''}
-                <div class="msg-bubble">${content}</div>
+                <div class="msg-bubble" ${isMine?`onclick="_showRecall(event,'${m.id}')"`:''} style="position:relative;">${content}${recallBtn}</div>
                 <div class="msg-meta">${m.time}</div>
             </div>`;
         }).join('');
