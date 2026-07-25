@@ -251,7 +251,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
 .ai-modal-body{
     padding:22px 28px;white-space:pre-wrap;
     line-height:1.8;font-size:16px;color:#1e293b;
-    overflow-y:auto;flex:1;min-height:0;
+    overflow-y:auto;flex:1;min-height:100px;
 }
 .ai-modal-progress{
     height:3px;background:#e9f0fa;flex-shrink:0;overflow:hidden;
@@ -519,18 +519,18 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
             正在生成报告...
         </div>
         <!-- 📊 图表区域 -->
-        <div id="reportChartArea" style="display:none;padding:0 22px 12px 22px;flex-shrink:0;">
-            <div style="border-top:1px solid #edf2f7;padding-top:6px;margin-bottom:4px;">
-                <span style="font-size:11px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
+        <div id="reportChartArea" style="display:none;padding:0 22px 8px 22px;flex-shrink:0;">
+            <div style="border-top:1px solid #edf2f7;padding-top:4px;margin-bottom:2px;">
+                <span style="font-size:9px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div style="background:#f8fbff;border-radius:6px;padding:4px 6px;border:1px solid #eef2f6;">
-                    <div style="font-size:9px;color:#94a3b8;margin-bottom:1px;">正确率趋势</div>
-                    <canvas id="reportChart1" style="height:18px;width:100%;"></canvas>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+                <div style="background:#f8fbff;border-radius:4px;padding:3px 5px;border:1px solid #eef2f6;">
+                    <div style="font-size:8px;color:#94a3b8;margin-bottom:1px;">正确率趋势</div>
+                    <div style="height:28px;position:relative;"><canvas id="reportChart1"></canvas></div>
                 </div>
-                <div style="background:#f8fbff;border-radius:6px;padding:4px 6px;border:1px solid #eef2f6;">
-                    <div style="font-size:9px;color:#94a3b8;margin-bottom:1px;">康复雷达</div>
-                    <canvas id="reportChart2" style="height:18px;width:100%;"></canvas>
+                <div style="background:#f8fbff;border-radius:4px;padding:3px 5px;border:1px solid #eef2f6;">
+                    <div style="font-size:8px;color:#94a3b8;margin-bottom:1px;">康复雷达</div>
+                    <div style="height:28px;position:relative;"><canvas id="reportChart2"></canvas></div>
                 </div>
             </div>
         </div>
@@ -1058,6 +1058,7 @@ window.renderReportCharts = renderReportCharts;
 
 function closeReportModal() {
     document.getElementById('aiModal').classList.remove('open');
+    document.getElementById('aiProgress').style.display = 'none';
     const charts = ['reportChart1', 'reportChart2'];
     charts.forEach(id => {
         const canvas = document.getElementById(id);
@@ -1066,8 +1067,6 @@ function closeReportModal() {
             if (parent) {
                 const newCanvas = document.createElement('canvas');
                 newCanvas.id = id;
-                newCanvas.style.height = '18px';
-                newCanvas.style.width = '100%';
                 parent.replaceChild(newCanvas, canvas);
             }
         }
