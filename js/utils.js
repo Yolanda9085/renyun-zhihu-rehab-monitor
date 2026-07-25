@@ -26,7 +26,7 @@ function initHeader(role) {
     const nameEl   = document.getElementById('headerName');
     const refEl    = document.getElementById('headerRef');
     if (avatarEl) avatarEl.textContent = user.name.charAt(0);
-    if (nameEl)   nameEl.textContent   = user.name;
+    if (nameEl)   nameEl.textContent   = role === 'patient' && user.age ? `${user.name} · ${user.age}岁` : user.name;
     if (refEl) {
         if (role === 'patient') refEl.textContent = '主治：' + user.doctor;
         else refEl.textContent = user.department || '';

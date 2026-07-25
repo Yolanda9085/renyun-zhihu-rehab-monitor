@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>韧云智护 · 医生工作台</title>
 <link rel="stylesheet" href="css/style.css"/>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.0.0/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
@@ -37,7 +38,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 .detail-head .dname small{font-size:13px;font-weight:400;color:#64748b;margin-left:8px;}
 .doctor-chart-wrap{height:110px;margin:4px 0 16px;flex-shrink:0;}
 .record-section{font-weight:600;font-size:14px;color:#0a2540;margin-bottom:9px;flex-shrink:0;}
-.record-wrap{flex:1;overflow:auto;min-height:80px;border-radius:12px;border:1px solid #eef2f6;margin-bottom:16px;}
+.record-wrap{flex:1;overflow:auto;min-height:200px;border-radius:12px;border:1px solid #eef2f6;margin-bottom:16px;}
 .assign-bar{
     flex-shrink:0;background:#f8fbff;border-radius:14px;padding:16px 18px;
     border:1px solid #e9f0fa;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
@@ -61,7 +62,27 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 }
 .checkin-pill.warn{background:#fee2e2;color:#dc2626;}
 @media(max-width:1050px){.doctor-body{grid-template-columns:1fr;}}
-@media(max-width:640px){.doctor-body{padding:14px;gap:14px;}}
+@media(max-width:640px){.doctor-body{padding:14px;gap:14px;padding-bottom:70px;overflow-y:auto;}}
+
+/* ── Doctor mobile bottom nav ── */
+.doc-mobile-nav{
+    display:none;position:fixed;bottom:0;left:0;right:0;height:58px;
+    background:#fff;border-top:1px solid #e9f0fa;z-index:1100;
+    justify-content:space-around;align-items:center;
+    box-shadow:0 -2px 12px rgba(0,0,0,0.05);
+}
+@media(max-width:640px){
+    .doc-mobile-nav{display:flex;}
+    .chat-fab{display:none !important;}
+}
+.doc-mob-btn{
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:none;border:none;color:#64748b;font-size:10px;
+    cursor:pointer;padding:6px 10px;border-radius:8px;transition:0.15s;
+}
+.doc-mob-btn .dm-icon{font-size:20px;}
+.doc-mob-btn.active{color:#2563eb;}
+.doc-mob-btn:hover{color:#2563eb;}
 
 /* AI 报告弹窗 */
 .ai-modal-overlay{
@@ -70,20 +91,33 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 }
 .ai-modal-overlay.open{display:flex;}
 .ai-modal-box{
-    background:#fff;border-radius:16px;width:100%;max-width:560px;
+    background:#fff;border-radius:16px;width:100%;max-width:720px;
     max-height:85vh;display:flex;flex-direction:column;
     box-shadow:0 10px 40px rgba(0,0,0,0.2);
+    overflow:hidden;
 }
 .ai-modal-header{
     display:flex;justify-content:space-between;align-items:center;
     padding:18px 22px;border-bottom:1px solid #edf2f7;
+    background:#fff;z-index:2;flex-shrink:0;
 }
 .ai-modal-header h3{color:#1a4b8c;font-size:17px;margin:0;}
 .ai-modal-close{background:none;border:none;font-size:22px;color:#7f8c8d;cursor:pointer;}
-.ai-modal-body{
-    padding:22px;overflow-y:auto;white-space:pre-wrap;
-    line-height:1.7;font-size:14px;color:#1e293b;
+.ai-modal-scroll{
+    flex:1;overflow-y:auto;min-height:0;
 }
+.ai-modal-body{
+    padding:22px 28px;white-space:pre-wrap;
+    line-height:1.4;font-size:16px;color:#1e293b;
+}
+.report-chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.report-chart-card{background:#f8fbff;border-radius:8px;padding:10px 12px;border:1px solid #eef2f6;}
+.report-chart-title{font-size:11px;color:#94a3b8;margin-bottom:4px;}
+.report-chart-canvas-wrap{height:170px;position:relative;}
+@media(max-width:600px){
+    .report-chart-grid{grid-template-columns:1fr;}
+}
+@keyframes progressAnim{0%{width:0%}100%{width:95%}}
 .ai-report-btn{
     padding:8px 18px;background:linear-gradient(135deg,#1a4b8c,#2563eb);
     color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:500;
@@ -222,34 +256,52 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
     </div>
 </div>
 
+<!-- ══ DOCTOR MOBILE BOTTOM NAV ══ -->
+<nav class="doc-mobile-nav" id="docMobileNav">
+    <button class="doc-mob-btn active" onclick="docMobNav('plist',this)">
+        <span class="dm-icon">👥</span>患者
+    </button>
+    <button class="doc-mob-btn" onclick="docMobNav('detail',this)">
+        <span class="dm-icon">📋</span>详情
+    </button>
+    <button class="doc-mob-btn" onclick="window._openChat&&window._openChat()">
+        <span class="dm-icon">💬</span>沟通
+    </button>
+    <button class="doc-mob-btn" onclick="generateDoctorReport()">
+        <span class="dm-icon">🤖</span>报告
+    </button>
+    <button class="doc-mob-btn" onclick="location.href='doctor-task.html'">
+        <span class="dm-icon">📝</span>任务
+    </button>
+</nav>
+
 <!-- AI 报告弹窗 -->
-<div class="ai-modal-overlay" id="aiModal">
-    <div class="ai-modal-box" style="max-width:720px;">
+<div class="ai-modal-overlay" id="aiModal" onclick="if(event.target===this)closeReportModal()">
+    <div class="ai-modal-box" onclick="event.stopPropagation()">
         <div class="ai-modal-header">
             <h3>🤖 AI 康复评估报告</h3>
             <button class="ai-modal-close" onclick="closeReportModal()">&times;</button>
         </div>
-        <div class="ai-modal-body" id="aiModalBody" style="max-height:60vh;overflow-y:auto;">
-            正在生成报告...
-        </div>
-        <!-- 📊 图表区域 -->
-        <div id="reportChartArea" style="display:none;padding:0 22px 22px 22px;">
-            <div style="border-top:1px solid #edf2f7;padding-top:16px;margin-bottom:12px;">
-                <span style="font-size:14px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
+        <div class="ai-modal-progress" id="aiProgress" style="display:none;height:3px;background:#e9f0fa;overflow:hidden;flex-shrink:0;"><div class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);animation:progressAnim 8s ease-out forwards;"></div></div>
+        <div class="ai-modal-scroll">
+            <div class="ai-modal-body" id="aiModalBody">
+                正在生成报告...
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                <div style="background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
-                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">正确率趋势</div>
-                    <canvas id="reportChart1" style="height:100px;width:100%;"></canvas>
+            <!-- 📊 图表区域 -->
+            <div id="reportChartArea" style="display:none;padding:0 22px 16px 22px;">
+                <div style="border-top:1px solid #edf2f7;padding-top:8px;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
                 </div>
-                <div style="background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
-                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">康复雷达</div>
-                    <canvas id="reportChart2" style="height:100px;width:100%;"></canvas>
+                <div class="report-chart-grid">
+                    <div class="report-chart-card">
+                        <div class="report-chart-title">正确率趋势</div>
+                        <div class="report-chart-canvas-wrap"><canvas id="reportChart1"></canvas></div>
+                    </div>
+                    <div class="report-chart-card">
+                        <div class="report-chart-title">康复雷达</div>
+                        <div class="report-chart-canvas-wrap"><canvas id="reportChart2"></canvas></div>
+                    </div>
                 </div>
-            </div>
-            <div style="margin-top:10px;background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
-                <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">打卡热力</div>
-                <canvas id="reportChart3" style="height:60px;width:100%;"></canvas>
             </div>
         </div>
     </div>
@@ -257,12 +309,23 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 
 <script src="js/db.js"></script>
 <script src="js/utils.js"></script>
-<script src="js/mqtt-sim.js"></script>
 <script>
 if (!requireAuth('doctor')) throw new Error('unauth');
 initHeader('doctor');
 
+function docMobNav(target, btn) {
+    document.querySelectorAll('.doc-mob-btn').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const container = document.querySelector('.doctor-body');
+    const targetEl = target === 'plist' ? document.querySelector('.plist-card') : document.querySelector('.detail-panel');
+    if (container && targetEl) {
+        container.scrollTo({ top: targetEl.offsetTop - container.offsetTop, behavior: 'smooth' });
+    }
+}
+window.docMobNav = docMobNav;
+
 let docChart = null;
+let docPitchHistory = [], docRollHistory = [], docTimeLabels = [];
 
 function renderPatientList() {
     const wrap = document.getElementById('plistWrap');
@@ -301,19 +364,20 @@ function renderDetail(id) {
     document.getElementById('dPatientName').innerHTML = p.name + ' <small>' + p.status + '</small>';
     document.getElementById('dStatusTag').textContent = p.status;
 
-    // Chart - 使用写死数据绘制
-    const mData = PATIENT_MONITOR_DATA[id] || PATIENT_MONITOR_DATA['p1'];
+    // Chart - 实时MQTT数据，初始为空
     const ctx = document.getElementById('doctorChart').getContext('2d');
     if (docChart) docChart.destroy();
+    docPitchHistory = [];
+    docRollHistory = [];
+    docTimeLabels = [];
     docChart = new Chart(ctx, {
         type:'line',
         data:{
-            labels: mData.pitch.map((_,i)=>i+''),
-            datasets:[{
-                label:'Pitch 角度 (°)', data: mData.pitch,
-                borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.06)',
-                borderWidth:2, pointRadius:0, fill:true, tension:0.35,
-            }]
+            labels: docTimeLabels,
+            datasets:[
+                { label:'Pitch (俯仰角)', data: docPitchHistory, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.06)', borderWidth:2, pointRadius:0, fill:true, tension:0.35 },
+                { label:'Roll (横滚角)', data: docRollHistory, borderColor:'#ff8800', backgroundColor:'rgba(255,136,0,0.05)', borderWidth:2, pointRadius:0, fill:false, tension:0.35 }
+            ]
         },
         options:{
             responsive:true, maintainAspectRatio:false,
@@ -321,25 +385,20 @@ function renderDetail(id) {
                 tooltip:{backgroundColor:'#0a2540',cornerRadius:8,padding:8}},
             scales:{
                 x:{grid:{color:'rgba(0,0,0,0.03)'},ticks:{color:'#94a3b8',font:{size:9}},
-                   title:{display:true,text:'采样点',color:'#94a3b8',font:{size:9}}},
+                   title:{display:true,text:'时间',color:'#94a3b8',font:{size:9}}},
                 y:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{color:'#94a3b8',font:{size:9}},
-                   title:{display:true,text:'角度 (°)',color:'#94a3b8',font:{size:9}},min:0,max:80}
+                   title:{display:true,text:'角度 (°)',color:'#94a3b8',font:{size:9}},min:-90,max:90}
             },
             interaction:{intersect:false,mode:'index'}
         }
     });
 
-    // 更新指标数值
-    const lastPitch = mData.pitch[mData.pitch.length-1];
-    const lastRoll = mData.roll[mData.roll.length-1];
-    const lastKed = mData.ked[mData.ked.length-1];
-    document.getElementById('docValPitch').textContent = lastPitch + '.0°';
-    document.getElementById('docValRoll').textContent = lastRoll + '.0°';
-    document.getElementById('docValKed').textContent = lastKed + '.0°';
+    // 初始指标显示
+    document.getElementById('docValPitch').textContent = '0.0°';
+    document.getElementById('docValRoll').textContent = '0.0°';
+    document.getElementById('docValKed').textContent = '0.0°';
     const pill = document.getElementById('docMqttPill');
-    if (Math.abs(lastPitch) > 65) { pill.textContent='角度偏大'; pill.style.background='#fee2e2'; pill.style.color='#dc2626'; }
-    else if (Math.abs(lastPitch) >= 25) { pill.textContent='动作正常'; pill.style.background='#dcfce7'; pill.style.color='#16a34a'; }
-    else { pill.textContent='等待动作'; pill.style.background='#f1f5f9'; pill.style.color='#64748b'; }
+    pill.textContent = '等待数据'; pill.style.background = '#f1f5f9'; pill.style.color = '#64748b';
 
     // Records
     const tbody = document.getElementById('recordBody');
@@ -392,19 +451,62 @@ document.getElementById('quickAssignBtn').onclick = function() {
 renderPatientList();
 renderDetail(DB.currentPatientId);
 
-// ── 实时监测状态（静态写死数据）──────────────────────────
-document.getElementById('docMqttStatus').textContent = '模拟数据 (已加载)';
-document.getElementById('docMqttDot').classList.add('connected');
+// ── 实时监测（MQTT硬件连接）──────────────────────────
+try {
+const docMqttBrokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+const docMqttTopic = 'iot/rehab/renyun/data';
+const docMqttClient = mqtt.connect(docMqttBrokerUrl);
 
-// ── AI 康复报告（医生端）──────────────────────────────────
+docMqttClient.on('connect', () => {
+    docMqttClient.subscribe(docMqttTopic);
+    document.getElementById('docMqttStatus').textContent = '已连入网络通道 (实时)';
+    document.getElementById('docMqttDot').classList.add('connected');
+});
+
+docMqttClient.on('error', () => {
+    document.getElementById('docMqttStatus').textContent = '连接失败';
+    document.getElementById('docMqttDot').classList.remove('connected');
+});
+
+docMqttClient.on('message', (_, message) => {
+    try {
+        const data = JSON.parse(message.toString());
+        const pitch = parseFloat(data.pitch || data.thigh_pitch || 0);
+        const roll = parseFloat(data.roll || data.thigh_roll || 0);
+        const ked = parseFloat(data.ked || 0);
+
+        document.getElementById('docValPitch').textContent = pitch.toFixed(1) + '°';
+        document.getElementById('docValRoll').textContent = roll.toFixed(1) + '°';
+        document.getElementById('docValKed').textContent = ked.toFixed(1) + '°';
+
+        const pill = document.getElementById('docMqttPill');
+        const absPitch = Math.abs(pitch);
+        if (absPitch > 65) { pill.textContent='角度偏大'; pill.style.background='#fee2e2'; pill.style.color='#dc2626'; }
+        else if (absPitch >= 25) { pill.textContent='动作正常'; pill.style.background='#dcfce7'; pill.style.color='#16a34a'; }
+        else { pill.textContent='等待动作'; pill.style.background='#f1f5f9'; pill.style.color='#64748b'; }
+
+        // 更新图表
+        docPitchHistory.push(pitch);
+        docRollHistory.push(roll);
+        docTimeLabels.push(new Date().toLocaleTimeString([], {minute:'2-digit', second:'2-digit'}));
+        if (docPitchHistory.length > 80) { docPitchHistory.shift(); docRollHistory.shift(); docTimeLabels.shift(); }
+        if (docChart) docChart.update();
+    } catch(e) {}
+});
+} catch(mqttErr) { console.warn('MQTT连接失败:', mqttErr); }
+
+// ── AI 康复报告（医生端 - 流式加速）──────────────────────────
 async function generateDoctorReport() {
     const modal = document.getElementById('aiModal');
     const body = document.getElementById('aiModalBody');
     const chartArea = document.getElementById('reportChartArea');
-    
+    const progress = document.getElementById('aiProgress');
+
     modal.classList.add('open');
-    body.textContent = '正在为该患者生成AI康复报告，请稍候...';
+    body.textContent = '正在连接AI服务...';
     chartArea.style.display = 'none';
+    progress.style.display = 'block';
+    progress.innerHTML = '<div class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);animation:progressAnim 8s ease-out forwards;"></div>';
 
     const p = DB.patients.find(x => x.id === DB.currentPatientId);
     if (!p) { body.textContent = '未选择患者'; return; }
@@ -419,57 +521,88 @@ async function generateDoctorReport() {
         else if (d < cursor) break;
     }
 
-    // 构建简洁的提示词
-    const recordSummary = (p.records || []).slice(0, 6).map(r =>
-        `${r.action} ${r.pitch}° ${r.status}`
-    ).join('；') || '暂无记录';
+    const recordSummary = (p.records || []).slice(0, 5).map(r =>
+        `${r.action}${r.pitch}°${r.status}`
+    ).join('；') || '暂无';
 
     const taskSummary = (p.tasks || []).map(t =>
-        `${t.name}×${t.count}${t.unit || '次'}${t.done ? '✅' : '⏳'}`
-    ).join('；') || '暂无任务';
+        `${t.name}×${t.count}`
+    ).join('；') || '暂无';
 
-    const prompt = `患者${p.name}，${p.age}岁，${p.gender || ''}，${p.status || '康复中'}。
-训练记录：${recordSummary}
-任务：${taskSummary}
-打卡：${totalCheckins}天，连续${streakDays}天。
-
-请生成康复评估报告，要求：200字以内，分5个小标题（概况、训练、依从性、风险、建议），简洁直接，用中文。`;
+    const prompt = `${p.name}，${p.age}岁${p.gender||''}，${p.status||'康复中'}。记录：${recordSummary}。任务：${taskSummary}。打卡${totalCheckins}天连续${streakDays}天。生成简短康复评估（5小标题：概况/训练/依从性/风险/建议，共150字内）`;
 
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
         const resp = await fetch('https://renyun-zhihu-rehab-monitor.onrender.com/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: [
-                    {
-                        role: 'system',
-                        content: '你是康复医师。回复简洁，200字以内，用5个小标题。不要用markdown格式。'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
+                    { role: 'system', content: '你是康复医师。150字内回复，5个小标题，纯文本。' },
+                    { role: 'user', content: prompt }
                 ],
-                temperature: 0.5
-            })
+                temperature: 0.5,
+                max_tokens: 300,
+                stream: true
+            }),
+            signal: controller.signal
         });
 
+        clearTimeout(timeout);
+
         if (!resp.ok) {
-            const errorText = await resp.text();
-            throw new Error(`请求失败 (${resp.status}): ${errorText}`);
+            const errorText = await resp.text().catch(() => '');
+            throw new Error(`请求失败 (${resp.status})`);
         }
 
-        const data = await resp.json();
-        const reportContent = data.choices?.[0]?.message?.content || '未能获取到报告内容。';
-        body.textContent = reportContent;
+        const contentType = resp.headers.get('content-type') || '';
+        if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            body.textContent = '';
 
-        // 渲染图表
-        renderDoctorReportCharts();
-        chartArea.style.display = 'block';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6).trim();
+                        if (data === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(data);
+                            const delta = json.choices?.[0]?.delta?.content || '';
+                            fullText += delta;
+                            body.textContent = fullText;
+                        } catch(e) {}
+                    }
+                }
+            }
+            if (!fullText) body.textContent = '未能获取到报告内容。';
+        } else {
+            const data = await resp.json();
+            const reportContent = data.choices?.[0]?.message?.content || '未能获取到报告内容。';
+            body.textContent = reportContent;
+        }
+
+        if (document.getElementById('aiModal').classList.contains('open')) {
+            progress.style.display = 'none';
+            renderDoctorReportCharts();
+            chartArea.style.display = 'block';
+        }
 
     } catch (err) {
-        body.textContent = `报告生成失败：${err.message}`;
+        if (err.name === 'AbortError') {
+            body.textContent = '请求超时，请稍后重试。';
+        } else {
+            body.textContent = `报告生成失败：${err.message}`;
+        }
         chartArea.style.display = 'none';
+        progress.style.display = 'none';
     }
 }
 window.generateDoctorReport = generateDoctorReport;
@@ -479,10 +612,8 @@ function renderDoctorReportCharts() {
     const p = DB.patients.find(x => x.id === DB.currentPatientId);
     if (!p) return;
 
-    // 销毁旧图表
-    if (window.reportChart1) { window.reportChart1.destroy(); }
-    if (window.reportChart2) { window.reportChart2.destroy(); }
-    if (window.reportChart3) { window.reportChart3.destroy(); }
+    if (window.reportChart1) { try { window.reportChart1.destroy(); } catch(e) {} window.reportChart1 = null; }
+    if (window.reportChart2) { try { window.reportChart2.destroy(); } catch(e) {} window.reportChart2 = null; }
 
     // ----- 图表1：正确率趋势（柱状图）-----
     const ctx1 = document.getElementById('reportChart1').getContext('2d');
@@ -502,13 +633,11 @@ function renderDoctorReportCharts() {
                 label: '正确率 %',
                 data: correctRates.slice(0, 7),
                 backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
-                borderRadius: 4,
-                barPercentage: 0.6
+                borderRadius: 4, barPercentage: 0.6
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false, animation: false,
             plugins: { legend: { display: false } },
             scales: {
                 y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 8 } } },
@@ -517,7 +646,7 @@ function renderDoctorReportCharts() {
         }
     });
 
-    // ----- 图表2：康复雷达（5个维度）-----
+    // ----- 图表2：康复雷达（4个维度）-----
     const ctx2 = document.getElementById('reportChart2').getContext('2d');
     const totalRec = p.records.length || 1;
     const standardRatio = Math.min(100, Math.round((p.records.filter(r => r.status === '标准').length / totalRec) * 100));
@@ -532,61 +661,13 @@ function renderDoctorReportCharts() {
             datasets: [{
                 data: [standardRatio, stability, compliance, progress],
                 backgroundColor: 'rgba(37,99,235,0.15)',
-                borderColor: '#2563eb',
-                borderWidth: 1.5,
-                pointRadius: 2
+                borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 2
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false, animation: false,
             plugins: { legend: { display: false } },
-            scales: {
-                r: {
-                    min: 0,
-                    max: 100,
-                    ticks: { font: { size: 7 }, stepSize: 25 },
-                    pointLabels: { font: { size: 8 } },
-                    grid: { color: 'rgba(0,0,0,0.06)' }
-                }
-            }
-        }
-    });
-
-    // ----- 图表3：打卡热力（条形图）-----
-    const ctx3 = document.getElementById('reportChart3').getContext('2d');
-    const todayDate = new Date();
-    const weekDays = [];
-    const weekDone = [];
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(todayDate);
-        d.setDate(d.getDate() - i);
-        const ds = d.toISOString().slice(0, 10);
-        weekDays.push((d.getMonth()+1) + '/' + d.getDate());
-        const found = p.history.find(h => h.date === ds);
-        weekDone.push(found && found.done ? 100 : 0);
-    }
-
-    window.reportChart3 = new Chart(ctx3, {
-        type: 'bar',
-        data: {
-            labels: weekDays,
-            datasets: [{
-                label: '打卡',
-                data: weekDone,
-                backgroundColor: weekDone.map(v => v === 100 ? '#22c55e' : '#e2e8f0'),
-                borderRadius: 3,
-                barPercentage: 0.7
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { min: 0, max: 100, grid: { display: false }, ticks: { display: false } },
-                x: { grid: { display: false }, ticks: { font: { size: 8 } } }
-            }
+            scales: { r: { min: 0, max: 100, ticks: { font: { size: 7 }, stepSize: 25 }, pointLabels: { font: { size: 8 } }, grid: { color: 'rgba(0,0,0,0.06)' } } }
         }
     });
 }
@@ -595,26 +676,21 @@ window.renderDoctorReportCharts = renderDoctorReportCharts;
 // ── 关闭报告弹窗 ──────────────────────────────────────────
 function closeReportModal() {
     document.getElementById('aiModal').classList.remove('open');
-    // 直接删除 canvas 元素，让浏览器自动清理
-    const charts = ['reportChart1', 'reportChart2', 'reportChart3'];
+    document.getElementById('aiProgress').style.display = 'none';
+    const charts = ['reportChart1', 'reportChart2'];
     charts.forEach(id => {
         const canvas = document.getElementById(id);
         if (canvas) {
-            // 移除 canvas 的父元素重新创建，彻底清除图表实例
             const parent = canvas.parentNode;
             if (parent) {
                 const newCanvas = document.createElement('canvas');
                 newCanvas.id = id;
-                newCanvas.style.height = '100px';
-                newCanvas.style.width = '100%';
                 parent.replaceChild(newCanvas, canvas);
             }
         }
     });
-    // 清空全局引用
     window.reportChart1 = null;
     window.reportChart2 = null;
-    window.reportChart3 = null;
 }
 window.closeReportModal = closeReportModal;
 </script>

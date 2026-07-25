@@ -137,6 +137,8 @@ body{
 }
 @media(max-width:640px){
     .app-header{padding:10px 16px;flex-wrap:wrap;height:auto;gap:8px;}
+    .app-header .left{order:2;}
+    .app-header .right{order:1;margin-left:0;}
     .doctor-ref{display:none;}
     .nav-btn span{display:none;}
 }
