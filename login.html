@@ -58,7 +58,33 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
     .login-brand{padding:32px 28px;}
     .login-form{flex:unset;padding:32px 28px;}
 }
-@media(max-width:480px){.login-form{padding:24px 20px;}}
+@media(max-width:480px){
+    .login-form{padding:24px 20px;}
+    .login-brand{padding:24px 20px;}
+    .brand-logo{font-size:26px;gap:8px;flex-wrap:wrap;}
+    .brand-slogan{font-size:15px;}
+    .feature-tags .tag{font-size:12px;padding:4px 12px;}
+}
+@media(max-width:360px){
+    .brand-logo{font-size:22px;}
+}
+
+/* ── About modal responsive ── */
+.about-product-grid,.about-team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px;}
+.about-features-grid,.contact-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.about-modal-pad{padding:28px;}
+.about-tab-btn{padding:10px 22px;font-size:14px;}
+@media(max-width:700px){
+    .about-product-grid,.about-team-grid{grid-template-columns:1fr;}
+}
+@media(max-width:600px){
+    .about-features-grid,.contact-grid-2{grid-template-columns:1fr;}
+    .about-modal-pad{padding:16px;}
+    .about-tab-btn{padding:9px 12px;font-size:13px;}
+    #aboutOverlay{padding:10px;}
+    #aboutModal{border-radius:16px;max-height:92vh;}
+    .contact-fallback-line a{display:block;margin-top:4px;}
+}
 </style>
 </head>
 <body>
@@ -82,21 +108,21 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
         <div style="display:flex;align-items:center;justify-content:space-between;
             padding:20px 28px 0;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
             <div style="display:flex;gap:4px;">
-                <button id="tabProduct" onclick="switchAboutTab('product')"
-                    style="padding:10px 22px;border:none;background:none;font-size:14px;
+                <button id="tabProduct" class="about-tab-btn" onclick="switchAboutTab('product')"
+                    style="border:none;background:none;
                     font-weight:600;color:#2563eb;border-bottom:2.5px solid #2563eb;
                     cursor:pointer;transition:0.2s;">关于产品</button>
-                <button id="tabTeam" onclick="switchAboutTab('team')"
-                    style="padding:10px 22px;border:none;background:none;font-size:14px;
+                <button id="tabTeam" class="about-tab-btn" onclick="switchAboutTab('team')"
+                    style="border:none;background:none;
                     font-weight:500;color:#94a3b8;border-bottom:2.5px solid transparent;
                     cursor:pointer;transition:0.2s;">关于我们</button>
             </div>
             <button onclick="closeAbout()" style="width:32px;height:32px;border-radius:50%;
                 border:none;background:#f1f5f9;cursor:pointer;font-size:16px;color:#64748b;
-                display:flex;align-items:center;justify-content:center;transition:0.15s;">✕</button>
+                display:flex;align-items:center;justify-content:center;transition:0.15s;flex-shrink:0;">✕</button>
         </div>
         <!-- Tab content -->
-        <div style="flex:1;overflow-y:auto;padding:28px;">
+        <div class="about-modal-pad" style="flex:1;overflow-y:auto;">
             <!-- Product tab -->
             <div id="tabContentProduct">
                 <div style="margin-bottom:28px;">
@@ -113,7 +139,7 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
                     </p>
                 </div>
                 <!-- Product images -->
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px;">
+                <div class="about-product-grid">
                     <div style="border-radius:16px;overflow:hidden;border:1px solid #e9f0fa;
                         box-shadow:0 4px 16px rgba(0,0,0,0.06);">
                         <img src="产品1.jpg" alt="产品图1" style="width:100%;height:160px;object-fit:cover;display:block;"/>
@@ -148,7 +174,7 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
                 <!-- Features list -->
                 <div style="background:#f8fbff;border-radius:16px;padding:20px 24px;border:1px solid #e9f0fa;">
                     <div style="font-size:14px;font-weight:600;color:#0a2540;margin-bottom:14px;">核心功能</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="about-features-grid">
                         <div style="display:flex;align-items:flex-start;gap:10px;">
                             <span style="font-size:18px;flex-shrink:0;">📊</span>
                             <div><div style="font-size:13px;font-weight:500;color:#1e293b;">实时动作监测</div>
@@ -192,7 +218,7 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
                     </p>
                 </div>
                 <!-- Team members -->
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px;">
+                <div class="about-team-grid">
                     <div style="background:#f8fbff;border-radius:16px;padding:20px 18px;border:1px solid #e9f0fa;text-align:center;">
                         <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#1a4b8c,#2563eb);
                             color:#fff;font-size:22px;font-weight:700;display:flex;align-items:center;
@@ -263,7 +289,7 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
                     </p>
                     <form id="contactForm" onsubmit="submitContact(event)"
                         style="display:flex;flex-direction:column;gap:10px;">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div class="contact-grid-2">
                             <input id="contactName" type="text" placeholder="您的姓名"
                                 style="padding:10px 13px;border:1.5px solid #bfdbfe;border-radius:10px;
                                 font-size:13px;font-family:inherit;outline:none;background:#fff;transition:0.2s;"
@@ -287,7 +313,7 @@ body{height:100vh;overflow:hidden;display:flex;align-items:center;justify-conten
                             onmouseover="this.style.background='#1d4ed8'" onmouseout="this.style.background='#2563eb'">
                             发送邮件
                         </button>
-                        <div style="font-size:12px;color:#64748b;text-align:center;">
+                        <div class="contact-fallback-line" style="font-size:12px;color:#64748b;text-align:center;">
                             或直接发送邮件至：<a href="mailto:contact@rehab-cloud.com"
                             style="color:#2563eb;text-decoration:none;">contact@rehab-cloud.com</a>
                         </div>

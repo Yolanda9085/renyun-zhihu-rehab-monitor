@@ -62,7 +62,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 }
 .checkin-pill.warn{background:#fee2e2;color:#dc2626;}
 @media(max-width:1050px){.doctor-body{grid-template-columns:1fr;}}
-@media(max-width:640px){.doctor-body{padding:14px;gap:14px;padding-bottom:70px;}}
+@media(max-width:640px){.doctor-body{padding:14px;gap:14px;padding-bottom:70px;overflow-y:auto;}}
 
 /* ── Doctor mobile bottom nav ── */
 .doc-mobile-nav{
@@ -73,7 +73,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 }
 @media(max-width:640px){
     .doc-mobile-nav{display:flex;}
-    .chat-fab{bottom:80px !important;}
+    .chat-fab{display:none !important;}
 }
 .doc-mob-btn{
     display:flex;flex-direction:column;align-items:center;gap:2px;
@@ -99,14 +99,23 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 .ai-modal-header{
     display:flex;justify-content:space-between;align-items:center;
     padding:18px 22px;border-bottom:1px solid #edf2f7;
-    position:sticky;top:0;background:#fff;z-index:2;flex-shrink:0;
+    background:#fff;z-index:2;flex-shrink:0;
 }
 .ai-modal-header h3{color:#1a4b8c;font-size:17px;margin:0;}
 .ai-modal-close{background:none;border:none;font-size:22px;color:#7f8c8d;cursor:pointer;}
+.ai-modal-scroll{
+    flex:1;overflow-y:auto;min-height:0;
+}
 .ai-modal-body{
     padding:22px 28px;white-space:pre-wrap;
-    line-height:1.8;font-size:16px;color:#1e293b;
-    overflow-y:auto;flex:1;min-height:100px;
+    line-height:1.4;font-size:16px;color:#1e293b;
+}
+.report-chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.report-chart-card{background:#f8fbff;border-radius:8px;padding:10px 12px;border:1px solid #eef2f6;}
+.report-chart-title{font-size:11px;color:#94a3b8;margin-bottom:4px;}
+.report-chart-canvas-wrap{height:170px;position:relative;}
+@media(max-width:600px){
+    .report-chart-grid{grid-template-columns:1fr;}
 }
 @keyframes progressAnim{0%{width:0%}100%{width:95%}}
 .ai-report-btn{
@@ -144,7 +153,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 <div id="toast" class="toast"></div>
 <header class="app-header">
     <div class="left">
-        <a class="brand" href="doctor.html">🦿 韧云智护<small>· 医生工作台</small></a>
+        <a class="brand" href="doctor.html">🦿 <span class="brand-text"><span>韧云</span><span>智护</span></span><small>· 医生工作台</small></a>
     </div>
     <div class="right">
         <a class="user-info" href="profile.html">
@@ -155,7 +164,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
             </div>
         </a>
         <span class="doctor-ref" id="headerRef"></span>
-        <a class="nav-btn primary" href="doctor-task.html">📋 发布任务</a>
+        <a class="nav-btn primary" href="doctor-task.html" id="assignTaskBtn">📋 发布任务</a>
         <button class="nav-btn" onclick="logout()">退出</button>
     </div>
 </header>
@@ -249,11 +258,8 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 
 <!-- ══ DOCTOR MOBILE BOTTOM NAV ══ -->
 <nav class="doc-mobile-nav" id="docMobileNav">
-    <button class="doc-mob-btn active" onclick="document.querySelector('.plist-card').scrollIntoView({behavior:'smooth'})">
+    <button class="doc-mob-btn active" onclick="docMobNav('plist',this)">
         <span class="dm-icon">👥</span>患者
-    </button>
-    <button class="doc-mob-btn" onclick="document.querySelector('.detail-panel').scrollIntoView({behavior:'smooth'})">
-        <span class="dm-icon">📋</span>详情
     </button>
     <button class="doc-mob-btn" onclick="window._openChat&&window._openChat()">
         <span class="dm-icon">💬</span>沟通
@@ -274,22 +280,24 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
             <button class="ai-modal-close" onclick="closeReportModal()">&times;</button>
         </div>
         <div class="ai-modal-progress" id="aiProgress" style="display:none;height:3px;background:#e9f0fa;overflow:hidden;flex-shrink:0;"><div class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);animation:progressAnim 8s ease-out forwards;"></div></div>
-        <div class="ai-modal-body" id="aiModalBody">
-            正在生成报告...
-        </div>
-        <!-- 📊 图表区域 -->
-        <div id="reportChartArea" style="display:none;padding:0 22px 8px 22px;flex-shrink:0;">
-            <div style="border-top:1px solid #edf2f7;padding-top:4px;margin-bottom:2px;">
-                <span style="font-size:9px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
+        <div class="ai-modal-scroll">
+            <div class="ai-modal-body" id="aiModalBody">
+                正在生成报告...
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-                <div style="background:#f8fbff;border-radius:4px;padding:3px 5px;border:1px solid #eef2f6;">
-                    <div style="font-size:8px;color:#94a3b8;margin-bottom:1px;">正确率趋势</div>
-                    <div style="height:28px;position:relative;"><canvas id="reportChart1"></canvas></div>
+            <!-- 📊 图表区域 -->
+            <div id="reportChartArea" style="display:none;padding:0 22px 16px 22px;">
+                <div style="border-top:1px solid #edf2f7;padding-top:8px;margin-bottom:8px;">
+                    <span style="font-size:11px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
                 </div>
-                <div style="background:#f8fbff;border-radius:4px;padding:3px 5px;border:1px solid #eef2f6;">
-                    <div style="font-size:8px;color:#94a3b8;margin-bottom:1px;">康复雷达</div>
-                    <div style="height:28px;position:relative;"><canvas id="reportChart2"></canvas></div>
+                <div class="report-chart-grid">
+                    <div class="report-chart-card">
+                        <div class="report-chart-title">正确率趋势</div>
+                        <div class="report-chart-canvas-wrap"><canvas id="reportChart1"></canvas></div>
+                    </div>
+                    <div class="report-chart-card">
+                        <div class="report-chart-title">康复雷达</div>
+                        <div class="report-chart-canvas-wrap"><canvas id="reportChart2"></canvas></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -301,6 +309,17 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 <script>
 if (!requireAuth('doctor')) throw new Error('unauth');
 initHeader('doctor');
+
+function docMobNav(target, btn) {
+    document.querySelectorAll('.doc-mob-btn').forEach(el => el.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const container = document.querySelector('.doctor-body');
+    const targetEl = target === 'plist' ? document.querySelector('.plist-card') : document.querySelector('.detail-panel');
+    if (container && targetEl) {
+        container.scrollTo({ top: targetEl.offsetTop - container.offsetTop, behavior: 'smooth' });
+    }
+}
+window.docMobNav = docMobNav;
 
 let docChart = null;
 let docPitchHistory = [], docRollHistory = [], docTimeLabels = [];
@@ -590,8 +609,8 @@ function renderDoctorReportCharts() {
     const p = DB.patients.find(x => x.id === DB.currentPatientId);
     if (!p) return;
 
-    if (window.reportChart1) { window.reportChart1.destroy(); }
-    if (window.reportChart2) { window.reportChart2.destroy(); }
+    if (window.reportChart1) { try { window.reportChart1.destroy(); } catch(e) {} window.reportChart1 = null; }
+    if (window.reportChart2) { try { window.reportChart2.destroy(); } catch(e) {} window.reportChart2 = null; }
 
     // ----- 图表1：正确率趋势（柱状图）-----
     const ctx1 = document.getElementById('reportChart1').getContext('2d');
@@ -601,17 +620,16 @@ function renderDoctorReportCharts() {
         const pitch = parseFloat(r.pitch) || 0;
         return Math.min(100, Math.round((1 - Math.abs(pitch - 40) / 40) * 100));
     });
-    while (correctRates.length < 7) { correctRates.push(70); labels.push('—'); }
 
     window.reportChart1 = new Chart(ctx1, {
         type: 'bar',
         data: {
-            labels: labels.slice(0, 7),
+            labels: labels,
             datasets: [{
                 label: '正确率 %',
-                data: correctRates.slice(0, 7),
+                data: correctRates,
                 backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
-                borderRadius: 4, barPercentage: 0.6
+                borderRadius: 4, barPercentage: 0.4, categoryPercentage: 0.7
             }]
         },
         options: {
