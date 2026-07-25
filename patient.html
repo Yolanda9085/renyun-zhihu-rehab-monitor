@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>韧云智护 · 康复中心</title>
 <link rel="stylesheet" href="css/style.css"/>
+<script src="https://cdn.jsdelivr.net/npm/mqtt@5.0.0/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:#f0f5fc;}
@@ -200,9 +201,10 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
 }
 .ai-modal-overlay.open{display:flex;}
 .ai-modal-box{
-    background:#fff;border-radius:16px;width:100%;max-width:560px;
+    background:#fff;border-radius:16px;width:100%;max-width:720px;
     max-height:85vh;display:flex;flex-direction:column;
     box-shadow:0 10px 40px rgba(0,0,0,0.2);
+    overflow-y:auto;
 }
 .ai-modal-header{
     display:flex;justify-content:space-between;align-items:center;
@@ -211,8 +213,8 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
 .ai-modal-header h3{color:#1a4b8c;font-size:17px;margin:0;}
 .ai-modal-close{background:none;border:none;font-size:22px;color:#7f8c8d;cursor:pointer;}
 .ai-modal-body{
-    padding:22px;overflow-y:auto;white-space:pre-wrap;
-    line-height:1.7;font-size:14px;color:#1e293b;
+    padding:22px 28px;white-space:pre-wrap;
+    line-height:1.8;font-size:16px;color:#1e293b;
 }
 .ai-report-fab{display:none;}
 
@@ -437,32 +439,28 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
 
 <!-- AI 报告弹窗 -->
 <div class="ai-modal-overlay" id="aiModal">
-    <div class="ai-modal-box" style="max-width:720px;">
+    <div class="ai-modal-box">
         <div class="ai-modal-header">
             <h3>🤖 AI 康复评估报告</h3>
             <button class="ai-modal-close" onclick="closeReportModal()">&times;</button>
         </div>
-        <div class="ai-modal-body" id="aiModalBody" style="max-height:60vh;overflow-y:auto;">
+        <div class="ai-modal-body" id="aiModalBody">
             正在生成报告...
         </div>
         <!-- 📊 图表区域 -->
         <div id="reportChartArea" style="display:none;padding:0 22px 22px 22px;">
-            <div style="border-top:1px solid #edf2f7;padding-top:16px;margin-bottom:12px;">
-                <span style="font-size:14px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
+            <div style="border-top:1px solid #edf2f7;padding-top:12px;margin-bottom:8px;">
+                <span style="font-size:13px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                <div style="background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="background:#f8fbff;border-radius:8px;padding:10px;border:1px solid #eef2f6;">
                     <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">正确率趋势</div>
-                    <canvas id="reportChart1" style="height:100px;width:100%;"></canvas>
+                    <canvas id="reportChart1" style="height:70px;width:100%;"></canvas>
                 </div>
-                <div style="background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
+                <div style="background:#f8fbff;border-radius:8px;padding:10px;border:1px solid #eef2f6;">
                     <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">康复雷达</div>
-                    <canvas id="reportChart2" style="height:100px;width:100%;"></canvas>
+                    <canvas id="reportChart2" style="height:70px;width:100%;"></canvas>
                 </div>
-            </div>
-            <div style="margin-top:10px;background:#f8fbff;border-radius:10px;padding:12px;border:1px solid #eef2f6;">
-                <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">打卡热力</div>
-                <canvas id="reportChart3" style="height:60px;width:100%;"></canvas>
             </div>
         </div>
     </div>
@@ -470,7 +468,6 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;background:
 
 <script src="js/db.js"></script>
 <script src="js/utils.js"></script>
-<script src="js/mqtt-sim.js"></script>
 <script>
 if (!requireAuth('patient')) throw new Error('unauth');
 
@@ -655,10 +652,11 @@ function renderFullRecords() {
     ).join('');
 }
 
-// ── 实时监测（静态写死数据）────────────────────────────────
-const monitorData = PATIENT_MONITOR_DATA[p.id] || PATIENT_MONITOR_DATA['p1'];
+// ── 实时监测（MQTT硬件连接）────────────────────────────────
 let mqttCurrentMode = 'squat';
 const mqttModeNames = {squat:"靠墙静蹲", stance:"单脚支撑", sideleg:"侧抬腿训练", legraise:"直腿抬高"};
+let mqttPitchHistory = [], mqttRollHistory = [], mqttTimeLabels = [], mqttChart = null;
+let mqttTimerInterval = null, mqttCorrectStartTime = null, mqttLastFeedback = '';
 
 function mqttSpeak(text) {
     if ('speechSynthesis' in window) {
@@ -668,82 +666,125 @@ function mqttSpeak(text) {
     }
 }
 
+function mqttUpdateTimer(isCorrect) {
+    const timerEl = document.getElementById('mqttTimer');
+    if (isCorrect) {
+        if (!mqttCorrectStartTime) {
+            mqttCorrectStartTime = Date.now();
+            if (mqttTimerInterval) clearInterval(mqttTimerInterval);
+            mqttTimerInterval = setInterval(() => {
+                const elapsed = ((Date.now() - mqttCorrectStartTime) / 1000).toFixed(1);
+                timerEl.textContent = elapsed + 's';
+            }, 100);
+        }
+    } else {
+        if (mqttTimerInterval) { clearInterval(mqttTimerInterval); mqttTimerInterval = null; }
+        mqttCorrectStartTime = null;
+        timerEl.textContent = '00.0s';
+    }
+}
+
 // Mode switching
 document.querySelectorAll('.mqtt-mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.mqtt-mode-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         mqttCurrentMode = btn.dataset.mode;
+        mqttCorrectStartTime = null;
+        if (mqttTimerInterval) clearInterval(mqttTimerInterval);
+        document.getElementById('mqttTimer').textContent = '00.0s';
         mqttSpeak('切换至 ' + mqttModeNames[mqttCurrentMode] + ' 模式，请保持标准姿态。');
         document.getElementById('mqttStatusCard').style.backgroundColor = '#94a3b8';
-        document.getElementById('mqttAdvice').textContent = '已切换至' + mqttModeNames[mqttCurrentMode] + '模式。';
-        updateStatusFromData();
+        document.getElementById('mqttAdvice').textContent = '已切换至' + mqttModeNames[mqttCurrentMode] + '模式，等待硬件数据...';
     });
 });
 
-// 根据写死数据的最后一个点更新状态
-function updateStatusFromData() {
-    const lastPitch = monitorData.pitch[monitorData.pitch.length - 1];
-    const lastRoll = monitorData.roll[monitorData.roll.length - 1];
-    const lastKed = monitorData.ked[monitorData.ked.length - 1];
+// MQTT 连接
+const mqttBrokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+const mqttTopic = 'iot/rehab/renyun/data';
+const mqttClient = mqtt.connect(mqttBrokerUrl);
 
-    document.getElementById('mqttValPitch').textContent = lastPitch.toFixed(1) + '°';
-    document.getElementById('mqttValRoll').textContent = lastRoll.toFixed(1) + '°';
-    document.getElementById('mqttValKed').textContent = lastKed.toFixed(1) + '°';
+mqttClient.on('connect', () => {
+    mqttClient.subscribe(mqttTopic);
+    document.getElementById('mqttConnStatus').textContent = '已连入网络通道 (实时)';
+    document.getElementById('mqttDot').classList.add('connected');
+    document.getElementById('mqttAdvice').textContent = '网络通道就绪，请摆正起始姿态开始训练。';
+});
 
-    const cardEl = document.getElementById('mqttStatusCard');
-    const adviceEl = document.getElementById('mqttAdvice');
-    const timerEl = document.getElementById('mqttTimer');
-    let feedback = "数据正常传输", uiState = "neutral";
-    const absPitch = Math.abs(lastPitch), absRoll = Math.abs(lastRoll);
+mqttClient.on('error', () => {
+    document.getElementById('mqttConnStatus').textContent = '连接失败，请检查网络';
+    document.getElementById('mqttDot').classList.remove('connected');
+});
 
-    if (mqttCurrentMode === 'squat') {
-        if (absPitch >= 30 && absPitch <= 65) { feedback="静蹲姿态优秀，请保持均匀呼吸"; uiState="standard"; }
-        else if (absPitch > 65 && absPitch <= 80) { feedback="下蹲角度偏深，若膝盖疼痛请稍稍起身"; uiState="adjust"; }
-        else if (absPitch > 80) { feedback="危险！蹲姿过深易致韧带受损，请立即起身"; uiState="danger"; }
-        else { feedback="请背靠墙壁，下蹲至合理角度"; }
-    } else if (mqttCurrentMode === 'legraise') {
-        if (absPitch >= 25 && absPitch <= 48) {
-            if (absRoll <= 12) { feedback="直抬腿动作标准，保持股四头肌紧绷"; uiState="standard"; }
-            else { feedback="检测到大腿外翻代偿！请纠正脚尖朝上"; uiState="adjust"; }
-        } else if (absPitch > 48) { feedback="抬腿高度过高，易引发腰部代偿，请稍放低"; uiState="danger"; }
-        else { feedback="请绷紧大腿，平稳抬高至30度左右"; }
-    } else if (mqttCurrentMode === 'stance') {
-        if (absRoll <= 6 && absPitch <= 6) { feedback="核心控制极佳，本体感觉平衡优秀"; uiState="standard"; }
-        else if (absRoll <= 12 && absPitch <= 12) { feedback="重心轻微摇晃，请微收腹部核心"; uiState="adjust"; }
-        else { feedback="重心失控！请手扶椅背保护，安全第一"; uiState="danger"; }
-    } else if (mqttCurrentMode === 'sideleg') {
-        if (absRoll >= 23 && absRoll <= 45) {
-            if (absPitch <= 12) { feedback="外展角度合格，臀中肌持续发力"; uiState="standard"; }
-            else { feedback="身体前后倾斜！请保持躯干侧卧成一直线"; uiState="adjust"; }
-        } else if (absRoll > 45) { feedback="侧抬过高，请收低角度，防止腰椎借力"; uiState="danger"; }
-        else { feedback="伸直膝关节，平稳向外侧方抬起大腿"; }
-    }
+mqttClient.on('message', (_, message) => {
+    try {
+        const data = JSON.parse(message.toString());
+        const pitch = parseFloat(data.pitch || data.thigh_pitch || 0);
+        const roll = parseFloat(data.roll || data.thigh_roll || 0);
+        const ked = parseFloat(data.ked || 0);
 
-    adviceEl.textContent = feedback;
-    if (uiState === "standard") { cardEl.style.backgroundColor="var(--accent-green)"; cardEl.style.color="white"; timerEl.style.color="white"; }
-    else if (uiState === "adjust") { cardEl.style.backgroundColor="var(--accent-yellow)"; cardEl.style.color="#2c3e50"; timerEl.style.color="#1a365d"; }
-    else if (uiState === "danger") { cardEl.style.backgroundColor="var(--accent-red)"; cardEl.style.color="white"; timerEl.style.color="white"; }
-    else { cardEl.style.backgroundColor="#94a3b8"; cardEl.style.color="#1a365d"; timerEl.style.color="#1a365d"; }
-}
+        document.getElementById('mqttValPitch').textContent = pitch.toFixed(1) + '°';
+        document.getElementById('mqttValRoll').textContent = roll.toFixed(1) + '°';
+        document.getElementById('mqttValKed').textContent = ked.toFixed(1) + '°';
 
-// 连接状态
-document.getElementById('mqttConnStatus').textContent = '模拟数据 (已加载)';
-document.getElementById('mqttDot').classList.add('connected');
+        const cardEl = document.getElementById('mqttStatusCard');
+        const adviceEl = document.getElementById('mqttAdvice');
+        const timerEl = document.getElementById('mqttTimer');
+        let feedback = '数据正常传输', isCorrect = false, uiState = 'neutral';
+        const absPitch = Math.abs(pitch), absRoll = Math.abs(roll);
 
-// 初始化图表 — 直接用写死数据绘制
+        if (mqttCurrentMode === 'squat') {
+            if (absPitch >= 30 && absPitch <= 65) { feedback='静蹲姿态优秀，请保持均匀呼吸'; isCorrect=true; uiState='standard'; }
+            else if (absPitch > 65 && absPitch <= 80) { feedback='下蹲角度偏深，若膝盖疼痛请稍稍起身'; isCorrect=true; uiState='adjust'; }
+            else if (absPitch > 80) { feedback='危险！蹲姿过深易致韧带受损，请立即起身'; uiState='danger'; }
+            else { feedback='请背靠墙壁，下蹲至合理角度'; }
+        } else if (mqttCurrentMode === 'legraise') {
+            if (absPitch >= 25 && absPitch <= 48) {
+                if (absRoll <= 12) { feedback='直抬腿动作标准，保持股四头肌紧绷'; isCorrect=true; uiState='standard'; }
+                else { feedback='检测到大腿外翻代偿！请纠正脚尖朝上'; uiState='adjust'; }
+            } else if (absPitch > 48) { feedback='抬腿高度过高，易引发腰部代偿，请稍放低'; uiState='danger'; }
+            else { feedback='请绷紧大腿，平稳抬高至30度左右'; }
+        } else if (mqttCurrentMode === 'stance') {
+            if (absRoll <= 6 && absPitch <= 6) { feedback='核心控制极佳，本体感觉平衡优秀'; isCorrect=true; uiState='standard'; }
+            else if (absRoll <= 12 && absPitch <= 12) { feedback='重心轻微摇晃，请微收腹部核心'; isCorrect=true; uiState='adjust'; }
+            else { feedback='重心失控！请手扶椅背保护，安全第一'; uiState='danger'; }
+        } else if (mqttCurrentMode === 'sideleg') {
+            if (absRoll >= 23 && absRoll <= 45) {
+                if (absPitch <= 12) { feedback='外展角度合格，臀中肌持续发力'; isCorrect=true; uiState='standard'; }
+                else { feedback='身体前后倾斜！请保持躯干侧卧成一直线'; uiState='adjust'; }
+            } else if (absRoll > 45) { feedback='侧抬过高，请收低角度，防止腰椎借力'; uiState='danger'; }
+            else { feedback='伸直膝关节，平稳向外侧方抬起大腿'; }
+        }
+
+        adviceEl.textContent = feedback;
+        if (uiState === 'standard') { cardEl.style.backgroundColor='var(--accent-green)'; cardEl.style.color='white'; timerEl.style.color='white'; }
+        else if (uiState === 'adjust') { cardEl.style.backgroundColor='var(--accent-yellow)'; cardEl.style.color='#2c3e50'; timerEl.style.color='#1a365d'; }
+        else if (uiState === 'danger') { cardEl.style.backgroundColor='var(--accent-red)'; cardEl.style.color='white'; timerEl.style.color='white'; }
+        else { cardEl.style.backgroundColor='#94a3b8'; cardEl.style.color='#1a365d'; timerEl.style.color='#1a365d'; }
+
+        if (feedback !== mqttLastFeedback) { mqttSpeak(feedback); mqttLastFeedback = feedback; }
+        mqttUpdateTimer(isCorrect);
+
+        // 更新实时图表
+        mqttPitchHistory.push(pitch);
+        mqttRollHistory.push(roll);
+        mqttTimeLabels.push(new Date().toLocaleTimeString([], {minute:'2-digit', second:'2-digit'}));
+        if (mqttPitchHistory.length > 80) { mqttPitchHistory.shift(); mqttRollHistory.shift(); mqttTimeLabels.shift(); }
+        if (mqttChart) mqttChart.update();
+
+    } catch(e) { console.error('MQTT数据解析错误:', e); }
+});
+
+// 初始化实时图表
 function initMqttChart() {
     const ctx = document.getElementById('mqttPatientChart').getContext('2d');
-    new Chart(ctx, {
+    mqttChart = new Chart(ctx, {
         type:'line',
         data:{
-            labels: monitorData.pitch.map((_,i) => i+''),
+            labels: mqttTimeLabels,
             datasets:[
-                {
-                    label:'Pitch 角度 (°)', data: monitorData.pitch,
-                    borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.07)',
-                    borderWidth:2.5, pointRadius:0, fill:true, tension:0.35,
-                }
+                { label:'Pitch (俯仰角)', data: mqttPitchHistory, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,0.07)', borderWidth:2.5, pointRadius:0, fill:true, tension:0.35 },
+                { label:'Roll (横滚角)', data: mqttRollHistory, borderColor:'#ff8800', backgroundColor:'rgba(255,136,0,0.05)', borderWidth:2, pointRadius:0, fill:false, tension:0.35 }
             ]
         },
         options:{
@@ -754,31 +795,29 @@ function initMqttChart() {
             },
             scales:{
                 x:{grid:{color:'rgba(0,0,0,0.04)'},ticks:{color:'#94a3b8',font:{size:10}},
-                   title:{display:true,text:'采样点',color:'#94a3b8',font:{size:10}}},
+                   title:{display:true,text:'时间',color:'#94a3b8',font:{size:10}}},
                 y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{color:'#94a3b8',font:{size:10}},
-                   title:{display:true,text:'角度 (°)',color:'#94a3b8',font:{size:10}},min:0,max:80}
+                   title:{display:true,text:'角度 (°)',color:'#94a3b8',font:{size:10}},min:-90,max:90}
             },
             interaction:{intersect:false,mode:'index'}
         }
     });
 }
 initMqttChart();
-updateStatusFromData();
 
-// ── AI 康复报告（带图表）─────────────────────────────────
+// ── AI 康复报告（流式输出加速）─────────────────────────────────
 async function generatePatientReport() {
     const modal = document.getElementById('aiModal');
     const body = document.getElementById('aiModalBody');
     const chartArea = document.getElementById('reportChartArea');
-    
+
     modal.classList.add('open');
-    body.textContent = '正在生成AI康复报告，请稍候...';
+    body.textContent = '正在连接AI服务...';
     chartArea.style.display = 'none';
 
     const streakDays = parseInt(document.getElementById('streakNum').textContent) || 0;
     const totalCheckins = p.history.filter(h => h.done).length;
 
-    // ---- 构建简洁的 prompt ----
     const recordSummary = (p.records || []).slice(0, 6).map(r =>
         `${r.action} ${r.pitch}° ${r.status}`
     ).join('；') || '暂无记录';
@@ -795,22 +834,16 @@ async function generatePatientReport() {
 请生成康复评估报告，要求：200字以内，分5个小标题（概况、训练、依从性、风险、建议），简洁直接，用中文。`;
 
     try {
-        // ---- 调用 AI ----
         const resp = await fetch('https://renyun-zhihu-rehab-monitor.onrender.com/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: [
-                    {
-                        role: 'system',
-                        content: '你是康复医师。回复简洁，200字以内，用5个小标题。不要用markdown格式。'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
+                    { role: 'system', content: '你是康复医师。回复简洁，200字以内，用5个小标题。不要用markdown格式。' },
+                    { role: 'user', content: prompt }
                 ],
-                temperature: 0.5
+                temperature: 0.5,
+                stream: true
             })
         });
 
@@ -819,11 +852,41 @@ async function generatePatientReport() {
             throw new Error(`请求失败 (${resp.status}): ${errorText}`);
         }
 
-        const data = await resp.json();
-        const reportContent = data.choices?.[0]?.message?.content || '未能获取到报告内容。';
-        body.textContent = reportContent;
+        const contentType = resp.headers.get('content-type') || '';
+        if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+            // 流式读取
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            body.textContent = '';
 
-        // ---- 渲染图表 ----
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6).trim();
+                        if (data === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(data);
+                            const delta = json.choices?.[0]?.delta?.content || '';
+                            fullText += delta;
+                            body.textContent = fullText;
+                        } catch(e) {}
+                    }
+                }
+            }
+            if (!fullText) body.textContent = '未能获取到报告内容。';
+        } else {
+            // 非流式回退
+            const data = await resp.json();
+            const reportContent = data.choices?.[0]?.message?.content || '未能获取到报告内容。';
+            body.textContent = reportContent;
+        }
+
+        // 渲染图表
         renderReportCharts();
         chartArea.style.display = 'block';
 
@@ -836,30 +899,17 @@ window.generatePatientReport = generatePatientReport;
 
 // ── 渲染报告图表 ──────────────────────────────────────────
 function renderReportCharts() {
-    // 先销毁旧图表
-    if (window.reportChart1) {
-        try { window.reportChart1.destroy(); } catch(e) {}
-        window.reportChart1 = null;
-    }
-    if (window.reportChart2) {
-        try { window.reportChart2.destroy(); } catch(e) {}
-        window.reportChart2 = null;
-    }
-    if (window.reportChart3) {
-        try { window.reportChart3.destroy(); } catch(e) {}
-        window.reportChart3 = null;
-    }
+    if (window.reportChart1) { try { window.reportChart1.destroy(); } catch(e) {} window.reportChart1 = null; }
+    if (window.reportChart2) { try { window.reportChart2.destroy(); } catch(e) {} window.reportChart2 = null; }
 
     // ----- 图表1：正确率趋势（柱状图）-----
     const ctx1 = document.getElementById('reportChart1').getContext('2d');
-    // 从 records 中取最近 7 条，计算正确率（假设 pitch 在 25-55 之间算标准）
     const last7 = (p.records || []).slice(0, 7);
     const labels = last7.map((_, i) => `第${i+1}次`);
     const correctRates = last7.map(r => {
         const pitch = parseFloat(r.pitch) || 0;
         return Math.min(100, Math.round((1 - Math.abs(pitch - 40) / 40) * 100));
     });
-    // 如果数据不足，补默认值
     while (correctRates.length < 7) { correctRates.push(70); labels.push('—'); }
 
     window.reportChart1 = new Chart(ctx1, {
@@ -870,16 +920,12 @@ function renderReportCharts() {
                 label: '正确率 %',
                 data: correctRates.slice(0, 7),
                 backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
-                borderRadius: 4,
-                barPercentage: 0.6
+                borderRadius: 4, barPercentage: 0.6
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
             scales: {
                 y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 8 } } },
                 x: { grid: { display: false }, ticks: { font: { size: 8 } } }
@@ -903,65 +949,13 @@ function renderReportCharts() {
             datasets: [{
                 data: [standardRatio, stability, compliance, Math.min(100, strength + 20), progress],
                 backgroundColor: 'rgba(37,99,235,0.15)',
-                borderColor: '#2563eb',
-                borderWidth: 1.5,
-                pointRadius: 2
+                borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 2
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
-            scales: {
-                r: {
-                    min: 0,
-                    max: 100,
-                    ticks: { font: { size: 7 }, stepSize: 25 },
-                    pointLabels: { font: { size: 8 } },
-                    grid: { color: 'rgba(0,0,0,0.06)' }
-                }
-            }
-        }
-    });
-
-    // ----- 图表3：打卡热力（条形图）-----
-    const ctx3 = document.getElementById('reportChart3').getContext('2d');
-    const today = new Date();
-    const weekDays = [];
-    const weekDone = [];
-    for (let i = 6; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const ds = d.toISOString().slice(0, 10);
-        weekDays.push((d.getMonth()+1) + '/' + d.getDate());
-        const found = p.history.find(h => h.date === ds);
-        weekDone.push(found && found.done ? 100 : 0);
-    }
-
-    window.reportChart3 = new Chart(ctx3, {
-        type: 'bar',
-        data: {
-            labels: weekDays,
-            datasets: [{
-                label: '打卡',
-                data: weekDone,
-                backgroundColor: weekDone.map(v => v === 100 ? '#22c55e' : '#e2e8f0'),
-                borderRadius: 3,
-                barPercentage: 0.7
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false }
-            },
-            scales: {
-                y: { min: 0, max: 100, grid: { display: false }, ticks: { display: false } },
-                x: { grid: { display: false }, ticks: { font: { size: 8 } } }
-            }
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { r: { min: 0, max: 100, ticks: { font: { size: 7 }, stepSize: 25 }, pointLabels: { font: { size: 8 } }, grid: { color: 'rgba(0,0,0,0.06)' } } }
         }
     });
 }
@@ -969,26 +963,22 @@ window.renderReportCharts = renderReportCharts;
 
 function closeReportModal() {
     document.getElementById('aiModal').classList.remove('open');
-    // 直接删除 canvas 元素，让浏览器自动清理
-    const charts = ['reportChart1', 'reportChart2', 'reportChart3'];
+    const charts = ['reportChart1', 'reportChart2'];
     charts.forEach(id => {
         const canvas = document.getElementById(id);
         if (canvas) {
-            // 移除 canvas 的父元素重新创建，彻底清除图表实例
             const parent = canvas.parentNode;
             if (parent) {
                 const newCanvas = document.createElement('canvas');
                 newCanvas.id = id;
-                newCanvas.style.height = '100px';
+                newCanvas.style.height = '70px';
                 newCanvas.style.width = '100%';
                 parent.replaceChild(newCanvas, canvas);
             }
         }
     });
-    // 清空全局引用
     window.reportChart1 = null;
     window.reportChart2 = null;
-    window.reportChart3 = null;
 }
 window.closeReportModal = closeReportModal;
 </script>
