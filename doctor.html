@@ -74,18 +74,21 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
     background:#fff;border-radius:16px;width:100%;max-width:720px;
     max-height:85vh;display:flex;flex-direction:column;
     box-shadow:0 10px 40px rgba(0,0,0,0.2);
-    overflow-y:auto;
+    overflow:hidden;
 }
 .ai-modal-header{
     display:flex;justify-content:space-between;align-items:center;
     padding:18px 22px;border-bottom:1px solid #edf2f7;
+    position:sticky;top:0;background:#fff;z-index:2;flex-shrink:0;
 }
 .ai-modal-header h3{color:#1a4b8c;font-size:17px;margin:0;}
 .ai-modal-close{background:none;border:none;font-size:22px;color:#7f8c8d;cursor:pointer;}
 .ai-modal-body{
     padding:22px 28px;white-space:pre-wrap;
     line-height:1.8;font-size:16px;color:#1e293b;
+    overflow-y:auto;flex:1;min-height:0;
 }
+@keyframes progressAnim{0%{width:0%}100%{width:95%}}
 .ai-report-btn{
     padding:8px 18px;background:linear-gradient(135deg,#1a4b8c,#2563eb);
     color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:500;
@@ -225,28 +228,29 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 </div>
 
 <!-- AI 报告弹窗 -->
-<div class="ai-modal-overlay" id="aiModal">
-    <div class="ai-modal-box">
+<div class="ai-modal-overlay" id="aiModal" onclick="if(event.target===this)closeReportModal()">
+    <div class="ai-modal-box" onclick="event.stopPropagation()">
         <div class="ai-modal-header">
             <h3>🤖 AI 康复评估报告</h3>
             <button class="ai-modal-close" onclick="closeReportModal()">&times;</button>
         </div>
+        <div class="ai-modal-progress" id="aiProgress" style="display:none;height:3px;background:#e9f0fa;overflow:hidden;flex-shrink:0;"><div class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);animation:progressAnim 8s ease-out forwards;"></div></div>
         <div class="ai-modal-body" id="aiModalBody">
             正在生成报告...
         </div>
         <!-- 📊 图表区域 -->
-        <div id="reportChartArea" style="display:none;padding:0 22px 22px 22px;">
-            <div style="border-top:1px solid #edf2f7;padding-top:12px;margin-bottom:8px;">
-                <span style="font-size:13px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
+        <div id="reportChartArea" style="display:none;padding:0 22px 12px 22px;">
+            <div style="border-top:1px solid #edf2f7;padding-top:6px;margin-bottom:4px;">
+                <span style="font-size:11px;font-weight:600;color:#0a2540;">📊 数据可视化</span>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div style="background:#f8fbff;border-radius:8px;padding:10px;border:1px solid #eef2f6;">
-                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">正确率趋势</div>
-                    <canvas id="reportChart1" style="height:70px;width:100%;"></canvas>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div style="background:#f8fbff;border-radius:6px;padding:4px 6px;border:1px solid #eef2f6;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:1px;">正确率趋势</div>
+                    <canvas id="reportChart1" style="height:18px;width:100%;"></canvas>
                 </div>
-                <div style="background:#f8fbff;border-radius:8px;padding:10px;border:1px solid #eef2f6;">
-                    <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">康复雷达</div>
-                    <canvas id="reportChart2" style="height:70px;width:100%;"></canvas>
+                <div style="background:#f8fbff;border-radius:6px;padding:4px 6px;border:1px solid #eef2f6;">
+                    <div style="font-size:9px;color:#94a3b8;margin-bottom:1px;">康复雷达</div>
+                    <canvas id="reportChart2" style="height:18px;width:100%;"></canvas>
                 </div>
             </div>
         </div>
@@ -387,6 +391,7 @@ renderPatientList();
 renderDetail(DB.currentPatientId);
 
 // ── 实时监测（MQTT硬件连接）──────────────────────────
+try {
 const docMqttBrokerUrl = 'wss://broker.emqx.io:8084/mqtt';
 const docMqttTopic = 'iot/rehab/renyun/data';
 const docMqttClient = mqtt.connect(docMqttBrokerUrl);
@@ -427,16 +432,20 @@ docMqttClient.on('message', (_, message) => {
         if (docChart) docChart.update();
     } catch(e) {}
 });
+} catch(mqttErr) { console.warn('MQTT连接失败:', mqttErr); }
 
 // ── AI 康复报告（医生端 - 流式加速）──────────────────────────
 async function generateDoctorReport() {
     const modal = document.getElementById('aiModal');
     const body = document.getElementById('aiModalBody');
     const chartArea = document.getElementById('reportChartArea');
+    const progress = document.getElementById('aiProgress');
 
     modal.classList.add('open');
     body.textContent = '正在连接AI服务...';
     chartArea.style.display = 'none';
+    progress.style.display = 'block';
+    progress.innerHTML = '<div class="bar" style="height:100%;width:0%;background:linear-gradient(90deg,#2563eb,#60a5fa);animation:progressAnim 8s ease-out forwards;"></div>';
 
     const p = DB.patients.find(x => x.id === DB.currentPatientId);
     if (!p) { body.textContent = '未选择患者'; return; }
@@ -451,38 +460,40 @@ async function generateDoctorReport() {
         else if (d < cursor) break;
     }
 
-    const recordSummary = (p.records || []).slice(0, 6).map(r =>
-        `${r.action} ${r.pitch}° ${r.status}`
-    ).join('；') || '暂无记录';
+    const recordSummary = (p.records || []).slice(0, 5).map(r =>
+        `${r.action}${r.pitch}°${r.status}`
+    ).join('；') || '暂无';
 
     const taskSummary = (p.tasks || []).map(t =>
-        `${t.name}×${t.count}${t.unit || '次'}${t.done ? '✅' : '⏳'}`
-    ).join('；') || '暂无任务';
+        `${t.name}×${t.count}`
+    ).join('；') || '暂无';
 
-    const prompt = `患者${p.name}，${p.age}岁，${p.gender || ''}，${p.status || '康复中'}。
-训练记录：${recordSummary}
-任务：${taskSummary}
-打卡：${totalCheckins}天，连续${streakDays}天。
-
-请生成康复评估报告，要求：200字以内，分5个小标题（概况、训练、依从性、风险、建议），简洁直接，用中文。`;
+    const prompt = `${p.name}，${p.age}岁${p.gender||''}，${p.status||'康复中'}。记录：${recordSummary}。任务：${taskSummary}。打卡${totalCheckins}天连续${streakDays}天。生成简短康复评估（5小标题：概况/训练/依从性/风险/建议，共150字内）`;
 
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+
         const resp = await fetch('https://renyun-zhihu-rehab-monitor.onrender.com/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: [
-                    { role: 'system', content: '你是康复医师。回复简洁，200字以内，用5个小标题。不要用markdown格式。' },
+                    { role: 'system', content: '你是康复医师。150字内回复，5个小标题，纯文本。' },
                     { role: 'user', content: prompt }
                 ],
                 temperature: 0.5,
+                max_tokens: 300,
                 stream: true
-            })
+            }),
+            signal: controller.signal
         });
 
+        clearTimeout(timeout);
+
         if (!resp.ok) {
-            const errorText = await resp.text();
-            throw new Error(`请求失败 (${resp.status}): ${errorText}`);
+            const errorText = await resp.text().catch(() => '');
+            throw new Error(`请求失败 (${resp.status})`);
         }
 
         const contentType = resp.headers.get('content-type') || '';
@@ -517,12 +528,20 @@ async function generateDoctorReport() {
             body.textContent = reportContent;
         }
 
-        renderDoctorReportCharts();
-        chartArea.style.display = 'block';
+        if (document.getElementById('aiModal').classList.contains('open')) {
+            progress.style.display = 'none';
+            renderDoctorReportCharts();
+            chartArea.style.display = 'block';
+        }
 
     } catch (err) {
-        body.textContent = `报告生成失败：${err.message}`;
+        if (err.name === 'AbortError') {
+            body.textContent = '请求超时，请稍后重试。';
+        } else {
+            body.textContent = `报告生成失败：${err.message}`;
+        }
         chartArea.style.display = 'none';
+        progress.style.display = 'none';
     }
 }
 window.generateDoctorReport = generateDoctorReport;
@@ -557,7 +576,7 @@ function renderDoctorReportCharts() {
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false, animation: false,
             plugins: { legend: { display: false } },
             scales: {
                 y: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 8 } } },
@@ -585,7 +604,7 @@ function renderDoctorReportCharts() {
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false, animation: false,
             plugins: { legend: { display: false } },
             scales: { r: { min: 0, max: 100, ticks: { font: { size: 7 }, stepSize: 25 }, pointLabels: { font: { size: 8 } }, grid: { color: 'rgba(0,0,0,0.06)' } } }
         }
@@ -604,7 +623,7 @@ function closeReportModal() {
             if (parent) {
                 const newCanvas = document.createElement('canvas');
                 newCanvas.id = id;
-                newCanvas.style.height = '70px';
+                newCanvas.style.height = '18px';
                 newCanvas.style.width = '100%';
                 parent.replaceChild(newCanvas, canvas);
             }
