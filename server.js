@@ -19,6 +19,7 @@ app.use((req, res, next) => {
     }
     next();
 });
+app.get('/', (req, res) => res.redirect('/login.html'));
 app.use(express.static(__dirname));
 
 app.post('/api/report', async (req, res) => {
@@ -42,7 +43,7 @@ app.post('/api/report', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-chat',
         messages: [
           {
             role: 'system',
@@ -105,7 +106,7 @@ app.post('/api/chat', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-chat',
         messages: messages,
         temperature: temperature || 0.5,
         stream: false
@@ -156,7 +157,7 @@ app.post('/api/patient-report', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-chat',
         messages: [
           {
             role: 'system',
