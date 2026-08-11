@@ -153,7 +153,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 <div id="toast" class="toast"></div>
 <header class="app-header">
     <div class="left">
-        <a class="brand" href="doctor.html">🦿 韧云智护<small>· 医生工作台</small></a>
+        <a class="brand" href="doctor.html">🦿 <span class="brand-text"><span>韧云</span><span>智护</span></span><small>· 医生工作台</small></a>
     </div>
     <div class="right">
         <a class="user-info" href="profile.html">
@@ -164,7 +164,7 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
             </div>
         </a>
         <span class="doctor-ref" id="headerRef"></span>
-        <a class="nav-btn primary" href="doctor-task.html">📋 发布任务</a>
+        <a class="nav-btn primary" href="doctor-task.html" id="assignTaskBtn">📋 发布任务</a>
         <button class="nav-btn" onclick="logout()">退出</button>
     </div>
 </header>
@@ -260,9 +260,6 @@ body{height:100vh;overflow:hidden;display:flex;flex-direction:column;}
 <nav class="doc-mobile-nav" id="docMobileNav">
     <button class="doc-mob-btn active" onclick="docMobNav('plist',this)">
         <span class="dm-icon">👥</span>患者
-    </button>
-    <button class="doc-mob-btn" onclick="docMobNav('detail',this)">
-        <span class="dm-icon">📋</span>详情
     </button>
     <button class="doc-mob-btn" onclick="window._openChat&&window._openChat()">
         <span class="dm-icon">💬</span>沟通
@@ -623,17 +620,16 @@ function renderDoctorReportCharts() {
         const pitch = parseFloat(r.pitch) || 0;
         return Math.min(100, Math.round((1 - Math.abs(pitch - 40) / 40) * 100));
     });
-    while (correctRates.length < 7) { correctRates.push(70); labels.push('—'); }
 
     window.reportChart1 = new Chart(ctx1, {
         type: 'bar',
         data: {
-            labels: labels.slice(0, 7),
+            labels: labels,
             datasets: [{
                 label: '正确率 %',
-                data: correctRates.slice(0, 7),
+                data: correctRates,
                 backgroundColor: ['#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb'],
-                borderRadius: 4, barPercentage: 0.6
+                borderRadius: 4, barPercentage: 0.4, categoryPercentage: 0.7
             }]
         },
         options: {

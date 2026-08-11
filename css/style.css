@@ -21,6 +21,8 @@ body{
     display:flex;align-items:center;gap:8px;text-decoration:none;
 }
 .app-header .brand small{font-weight:400;font-size:13px;color:#64748b;letter-spacing:0;}
+.app-header .brand .brand-text{display:inline-flex;flex-wrap:wrap;line-height:1.15;}
+.app-header .brand .brand-text span{white-space:nowrap;}
 .app-header .right{display:flex;align-items:center;gap:12px;}
 
 /* User info clickable block */
@@ -35,7 +37,7 @@ body{
     color:#fff;display:flex;align-items:center;justify-content:center;
     font-weight:600;font-size:15px;flex-shrink:0;
 }
-.user-info .detail .name{font-weight:600;color:#0a2540;font-size:14px;}
+.user-info .detail .name{font-weight:600;color:#0a2540;font-size:14px;white-space:nowrap;}
 .user-info .detail .role-tag{
     font-size:11px;color:#64748b;background:#f1f5f9;
     padding:1px 9px;border-radius:20px;display:inline-block;
@@ -136,10 +138,18 @@ body{
     .app-header{padding:0 20px;}
 }
 @media(max-width:640px){
-    .app-header{padding:10px 16px;flex-wrap:wrap;height:auto;gap:8px;}
-    .app-header .left{order:2;}
-    .app-header .right{order:1;margin-left:0;}
+    .app-header{padding:8px 10px;flex-wrap:nowrap;height:auto;gap:4px;}
+    .app-header .left{flex-shrink:0;}
+    .app-header .brand{font-size:14px;gap:4px;letter-spacing:0;}
+    .app-header .brand small{display:none;}
+    .app-header .right{margin-left:auto;gap:4px;flex-shrink:1;min-width:0;}
+    .user-info{gap:6px;padding:4px 6px;min-width:0;}
+    .user-info .avatar{width:28px;height:28px;font-size:12px;}
+    .user-info .detail{min-width:0;}
+    .user-info .detail .name{font-size:12px;}
+    .user-info .detail .role-tag{display:none;}
     .doctor-ref{display:none;}
+    .nav-btn{padding:6px 10px;font-size:12px;}
     .nav-btn span{display:none;}
 }
 
