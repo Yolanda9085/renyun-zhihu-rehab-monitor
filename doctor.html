@@ -526,7 +526,7 @@ async function generateDoctorReport() {
         `${t.name}×${t.count}`
     ).join('；') || '暂无';
 
-    const prompt = `${p.name}，${p.age}岁${p.gender||''}，${p.status||'康复中'}。记录：${recordSummary}。任务：${taskSummary}。打卡${totalCheckins}天连续${streakDays}天。生成简短康复评估（5小标题：概况/训练/依从性/风险/建议，共150字内）`;
+    const prompt = `患者${p.name}，${p.age}岁${p.gender||''}，${p.status||'康复中'}。动作记录：${recordSummary}。今日康复处方：${taskSummary}。累计打卡${totalCheckins}天，连续依从${streakDays}天。请以临床病历措辞生成简明康复评估（5个小标题：一般情况/关节活动度与动作质量/康复依从性/风险分层/诊疗建议，共150字内）`;
 
     try {
         const controller = new AbortController();
@@ -537,7 +537,7 @@ async function generateDoctorReport() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 messages: [
-                    { role: 'system', content: '你是康复医师。150字内回复，5个小标题，纯文本。' },
+                    { role: 'system', content: '你是骨科运动康复专科医师，正在书写病历中的康复评估记录。请使用规范临床术语（如关节活动度ROM、动作代偿、康复分期、风险分层、康复处方等），语言严谨客观，避免口语化表达。150字内回复，5个小标题，纯文本。' },
                     { role: 'user', content: prompt }
                 ],
                 temperature: 0.5,
