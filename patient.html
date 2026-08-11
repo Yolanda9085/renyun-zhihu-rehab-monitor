@@ -1019,7 +1019,7 @@ async function generatePatientReport() {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
 
-        const resp = await fetch('https://renyun-zhihu-rehab-monitor.onrender.com/api/chat', {
+        const resp = await fetch('http://110.41.87.40:3000/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
