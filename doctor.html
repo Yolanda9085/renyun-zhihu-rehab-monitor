@@ -642,20 +642,21 @@ function renderDoctorReportCharts() {
         }
     });
 
-    // ----- 图表2：康复雷达（4个维度）-----
+    // ----- 图表2：康复雷达（5个维度）-----
     const ctx2 = document.getElementById('reportChart2').getContext('2d');
     const totalRec = p.records.length || 1;
     const standardRatio = Math.min(100, Math.round((p.records.filter(r => r.status === '标准').length / totalRec) * 100));
     const stability = Math.min(100, 100 - Math.round((p.records.filter(r => r.abnormal > 0).length / totalRec) * 100));
     const compliance = Math.min(100, Math.round((p.history.filter(h => h.done).length / Math.max(7, p.history.length)) * 100));
+    const strength = Math.min(100, Math.round((p.records.reduce((s, r) => s + (parseFloat(r.pitch) || 0), 0) / totalRec / 40) * 100));
     const progress = Math.min(100, Math.round((p.tasks.filter(t => t.done).length / Math.max(1, p.tasks.length)) * 100));
 
     window.reportChart2 = new Chart(ctx2, {
         type: 'radar',
         data: {
-            labels: ['动作质量', '稳定性', '依从性', '任务完成'],
+            labels: ['动作质量', '稳定性', '依从性', '力量', '任务完成'],
             datasets: [{
-                data: [standardRatio, stability, compliance, progress],
+                data: [standardRatio, stability, compliance, Math.min(100, strength + 20), progress],
                 backgroundColor: 'rgba(37,99,235,0.15)',
                 borderColor: '#2563eb', borderWidth: 1.5, pointRadius: 2
             }]
