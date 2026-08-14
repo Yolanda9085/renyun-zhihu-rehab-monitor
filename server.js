@@ -19,7 +19,6 @@ app.use((req, res, next) => {
     }
     next();
 });
-app.get('/', (req, res) => res.redirect('/login.html'));
 app.use(express.static(__dirname));
 
 app.post('/api/report', async (req, res) => {
@@ -43,7 +42,7 @@ app.post('/api/report', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: [
           {
             role: 'system',
@@ -106,7 +105,7 @@ app.post('/api/chat', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: messages,
         temperature: temperature || 0.5,
         stream: false
@@ -126,7 +125,54 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// 原来的 app.listen 保持不动
+// ============ 实时消息 API ============
+let serverMessages = [];
+const MAX_MSG = 600;
+const sseClients = [];
+
+// SSE 实时推送端点
+app.get('/api/messages/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  res.write('data: {"type":"connected"}\n\n');
+  const client = { id: Date.now() + '_' + Math.random(), res };
+  sseClients.push(client);
+  req.on('close', () => {
+    const i = sseClients.findIndex(c => c.id === client.id);
+    if (i !== -1) sseClients.splice(i, 1);
+  });
+});
+
+// 获取消息列表
+app.get('/api/messages', (req, res) => {
+  const { patientId } = req.query;
+  const result = patientId ? serverMessages.filter(m => m.toPatientId === patientId) : serverMessages;
+  res.json(result);
+});
+
+// 发送消息
+app.post('/api/messages', (req, res) => {
+  const msg = req.body;
+  if (!msg || !msg.id) return res.status(400).json({ error: 'invalid' });
+  serverMessages = serverMessages.filter(m => m.id !== msg.id);
+  serverMessages.push(msg);
+  if (serverMessages.length > MAX_MSG) serverMessages.splice(0, serverMessages.length - MAX_MSG);
+  sseClients.forEach(c => { try { c.res.write(`data: ${JSON.stringify({ type: 'message', msg })}\n\n`); } catch(_) {} });
+  res.json({ ok: true });
+});
+
+// 撤回消息
+app.patch('/api/messages/:id/recall', (req, res) => {
+  const msg = serverMessages.find(m => m.id === req.params.id);
+  if (!msg) return res.status(404).json({ error: 'not found' });
+  msg.recalled = true;
+  msg.text = '';
+  sseClients.forEach(c => { try { c.res.write(`data: ${JSON.stringify({ type: 'recall', id: req.params.id })}\n\n`); } catch(_) {} });
+  res.json({ ok: true });
+});
+
 app.listen(PORT, () => {
   console.log(`服务已启动: http://localhost:${PORT}`);
   if (!DEEPSEEK_API_KEY) {
@@ -157,7 +203,7 @@ app.post('/api/patient-report', async (req, res) => {
         Authorization: `Bearer ${DEEPSEEK_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek-v4-flash',
         messages: [
           {
             role: 'system',

@@ -917,27 +917,28 @@ mqttClient.on('message', (_, message) => {
         let feedback = '数据正常传输', isCorrect = false, uiState = 'neutral';
         const absPitch = Math.abs(pitch), absRoll = Math.abs(roll);
 
-        if (mqttCurrentMode === 'squat') {
+        if (mqttCurrentMode === 'squat') { // 1. 靠墙静蹲
             if (absPitch >= 30 && absPitch <= 65) { feedback='静蹲姿态优秀，请保持均匀呼吸'; isCorrect=true; uiState='standard'; }
             else if (absPitch > 65 && absPitch <= 80) { feedback='下蹲角度偏深，若膝盖疼痛请稍稍起身'; isCorrect=true; uiState='adjust'; }
-            else if (absPitch > 80) { feedback='危险！蹲姿过深易致韧带受损，请立即起身'; uiState='danger'; }
-            else { feedback='请背靠墙壁，下蹲至合理角度'; }
-        } else if (mqttCurrentMode === 'legraise') {
-            if (absPitch >= 25 && absPitch <= 48) {
-                if (absRoll <= 12) { feedback='直抬腿动作标准，保持股四头肌紧绷'; isCorrect=true; uiState='standard'; }
-                else { feedback='检测到大腿外翻代偿！请纠正脚尖朝上'; uiState='adjust'; }
-            } else if (absPitch > 48) { feedback='抬腿高度过高，易引发腰部代偿，请稍放低'; uiState='danger'; }
-            else { feedback='请绷紧大腿，平稳抬高至30度左右'; }
-        } else if (mqttCurrentMode === 'stance') {
-            if (absRoll <= 6 && absPitch <= 6) { feedback='核心控制极佳，本体感觉平衡优秀'; isCorrect=true; uiState='standard'; }
-            else if (absRoll <= 12 && absPitch <= 12) { feedback='重心轻微摇晃，请微收腹部核心'; isCorrect=true; uiState='adjust'; }
-            else { feedback='重心失控！请手扶椅背保护，安全第一'; uiState='danger'; }
-        } else if (mqttCurrentMode === 'sideleg') {
+            else if (absPitch > 80) { feedback='危险！蹲姿过深易致韧带受损，请立即起身'; isCorrect=false; uiState='danger'; }
+            else { feedback='请背靠墙壁，下蹲至合理角度'; isCorrect=false; }
+        } else if (mqttCurrentMode === 'legraise') { // 2. 直腿抬高 (已根据真实数据修正)
+            // 真实情况：平躺 Pitch 高（~70°+），抬腿后 Pitch 降低
+            if (absPitch >= 45 && absPitch <= 65) { feedback='直抬腿动作标准，保持股四头肌紧绷'; isCorrect=true; uiState='standard'; }
+            else if (absPitch < 45) { feedback='抬腿高度过高，易引发腰部代偿，请稍放低'; isCorrect=false; uiState='danger'; }
+            else if (absPitch > 70) { feedback='请绷紧大腿，平稳抬高至合适高度'; isCorrect=false; uiState='neutral'; }
+            else { feedback='继续调整抬腿高度'; isCorrect=false; uiState='adjust'; }
+        } else if (mqttCurrentMode === 'stance') { // 3. 单脚支撑 (已根据真实数据修正)
+            // 真实情况：正常站立时 Roll 本身很大（约 -90°），主要看 Pitch 是否稳定
+            if (absPitch <= 6) { feedback='核心控制极佳，本体感觉平衡优秀'; isCorrect=true; uiState='standard'; }
+            else if (absPitch <= 12) { feedback='重心轻微摇晃，请微收腹部核心'; isCorrect=true; uiState='adjust'; }
+            else { feedback='重心失控！请手扶椅背保护，安全第一'; isCorrect=false; uiState='danger'; }
+        } else if (mqttCurrentMode === 'sideleg') { // 4. 侧抬腿训练
             if (absRoll >= 23 && absRoll <= 45) {
                 if (absPitch <= 12) { feedback='外展角度合格，臀中肌持续发力'; isCorrect=true; uiState='standard'; }
-                else { feedback='身体前后倾斜！请保持躯干侧卧成一直线'; uiState='adjust'; }
-            } else if (absRoll > 45) { feedback='侧抬过高，请收低角度，防止腰椎借力'; uiState='danger'; }
-            else { feedback='伸直膝关节，平稳向外侧方抬起大腿'; }
+                else { feedback='身体前后倾斜！请保持躯干侧卧成一直线'; isCorrect=false; uiState='adjust'; }
+            } else if (absRoll > 45) { feedback='侧抬过高，请收低角度，防止腰椎借力'; isCorrect=false; uiState='danger'; }
+            else { feedback='伸直膝关节，平稳向外侧方抬起大腿'; isCorrect=false; uiState='neutral'; }
         }
 
         adviceEl.textContent = feedback;
@@ -1019,7 +1020,7 @@ async function generatePatientReport() {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
 
-        const resp = await fetch('http://110.41.87.40:3000/api/chat', {
+        const resp = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

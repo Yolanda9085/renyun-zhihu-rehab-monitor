@@ -288,6 +288,7 @@ function initChat(role) {
     document.body.appendChild(panel);
 
     let _activePid = DB.currentPatientId;
+    let _msgs = [];
     let _emojiOpen = false;
 
     // Init doctor patient selector
@@ -308,6 +309,9 @@ function initChat(role) {
     }
 
     _updateUnread();
+
+    _fetchAllMsgs();
+    _connectSSE();
 
     // ── Public API ──────────────────────────────────────────
     function _openChat() {
@@ -394,13 +398,9 @@ function initChat(role) {
     };
 
     window._recallMsg = function(msgId) {
-        const msg = (DB.messages||[]).find(m => m.id === msgId);
-        if (!msg) return;
-        if (msg.fromRole !== role) return;
-        msg.recalled = true;
-        msg.text = '';
-        saveDB();
-        _renderMsgs(_activePid);
+        const msg = _msgs.find(m => m.id === msgId);
+        if (!msg || msg.fromRole !== role) return;
+        fetch('/api/messages/' + msgId + '/recall', { method: 'PATCH' }).catch(() => {});
     };
 
     document.addEventListener('click', function() {
@@ -435,8 +435,7 @@ function initChat(role) {
     function _pushMsg(payload) {
         const now = new Date();
         const user = role==='patient' ? getCurrentPatient() : getCurrentDoctor();
-        DB.messages = DB.messages || [];
-        DB.messages.push({
+        const msg = {
             id: Date.now()+'_'+Math.random().toString(36).slice(2),
             fromRole: role,
             fromName: user ? user.name : '',
@@ -446,17 +445,21 @@ function initChat(role) {
             time: String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'),
             date: getTodayStr(),
             read: false,
-        });
-        if (DB.messages.length > 600) DB.messages.splice(0, DB.messages.length-600);
-        saveDB();
+        };
+        _msgs.push(msg);
         _renderMsgs(_activePid);
         _scrollMsgs();
+        fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(msg)
+        }).catch(() => {});
     }
 
     function _renderMsgs(pid) {
         const container = document.getElementById('chatMsgs');
         if (!container) return;
-        const msgs = (DB.messages||[]).filter(m=>m.toPatientId===pid);
+        const msgs = _msgs.filter(m=>m.toPatientId===pid);
         if (!msgs.length) {
             container.innerHTML = `<div class="chat-empty-state"><div class="chat-empty-icon">💬</div><div>暂无消息</div></div>`;
             return;
@@ -492,11 +495,9 @@ function initChat(role) {
     }
 
     function _markRead(pid) {
-        let changed = false;
-        (DB.messages||[]).forEach(m => {
-            if (m.toPatientId===pid && m.fromRole!==role && !m.read) { m.read=true; changed=true; }
+        _msgs.forEach(m => {
+            if (m.toPatientId===pid && m.fromRole!==role && !m.read) m.read = true;
         });
-        if (changed) saveDB();
     }
 
     function _updateUnread() {
@@ -504,9 +505,9 @@ function initChat(role) {
         if (!dot) return;
         let n = 0;
         if (role==='patient') {
-            n = (DB.messages||[]).filter(m=>m.toPatientId===DB.currentPatientId&&m.fromRole!=='patient'&&!m.read).length;
+            n = _msgs.filter(m=>m.toPatientId===DB.currentPatientId&&m.fromRole!=='patient'&&!m.read).length;
         } else {
-            n = (DB.messages||[]).filter(m=>m.fromRole==='patient'&&!m.read).length;
+            n = _msgs.filter(m=>m.fromRole==='patient'&&!m.read).length;
         }
         dot.textContent = n > 9 ? '9+' : String(n);
         dot.style.display = n > 0 ? 'flex' : 'none';
@@ -540,22 +541,46 @@ function initChat(role) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
     }
 
-    // Cross-tab storage sync
-    window.addEventListener('storage', e => {
-        if (e.key !== 'rehab_db_v2') return;
-        try {
-            const f = JSON.parse(e.newValue);
-            DB.messages = f.messages || [];
-            DB.reminders = f.reminders || [];
-            if (role==='patient') DB.patients = f.patients || DB.patients;
-        } catch(_) {}
-        _updateUnread();
-        if (document.getElementById('chatPanel').classList.contains('open')) {
-            _renderMsgs(_activePid);
-            _scrollMsgs();
-        }
-        if (role==='doctor') _renderReminders();
-    });
+    // 从服务器拉取所有消息
+    function _fetchAllMsgs() {
+        fetch('/api/messages')
+            .then(r => r.json())
+            .then(data => {
+                if (!Array.isArray(data)) return;
+                _msgs = data;
+                _updateUnread();
+                if (document.getElementById('chatPanel').classList.contains('open')) {
+                    _renderMsgs(_activePid);
+                    _scrollMsgs();
+                }
+            })
+            .catch(() => {});
+    }
+
+    // SSE 实时接收消息，断线后5秒重连
+    function _connectSSE() {
+        const es = new EventSource('/api/messages/stream');
+        es.onmessage = e => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.type === 'message') {
+                    if (!_msgs.find(m => m.id === data.msg.id)) _msgs.push(data.msg);
+                } else if (data.type === 'recall') {
+                    const m = _msgs.find(m => m.id === data.id);
+                    if (m) { m.recalled = true; m.text = ''; }
+                }
+                _updateUnread();
+                if (document.getElementById('chatPanel').classList.contains('open')) {
+                    _renderMsgs(_activePid);
+                    _scrollMsgs();
+                }
+            } catch(_) {}
+        };
+        es.onerror = () => {
+            es.close();
+            setTimeout(() => _connectSSE(), 5000);
+        };
+    }
 
     // Patient reminder checker (every 60s)
     if (role === 'patient') {
