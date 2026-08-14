@@ -717,46 +717,18 @@
     const client = mqtt.connect(brokerUrl);
 
     // =========================================================================
-    // 🔊 2. 语音播报核心逻辑（带防抖与中文语音优选）
+    // 🔊 2. 语音播报核心逻辑
     // =========================================================================
-    let voiceEnabled = true;
-    let lastSpeakTime = 0;
-    const SPEAK_INTERVAL = 2500;
-
     function speak(text) {
-      if (!voiceEnabled) return;
-      if (!('speechSynthesis' in window)) {
-        console.warn("当前浏览器不支持语音合成");
-        return;
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 1.1;
+        utterance.pitch = 1.0;
+        speechSynthesis.cancel(); // 强行插播最新提示
+        speechSynthesis.speak(utterance);
       }
-
-      const now = Date.now();
-      if (text === lastFeedback && now - lastSpeakTime < SPEAK_INTERVAL) {
-        return;
-      }
-
-      speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      const voices = speechSynthesis.getVoices();
-      const chineseVoice = voices.find(v => v.lang.includes('zh') && v.name.includes('Female'))
-        || voices.find(v => v.lang.includes('zh'));
-      if (chineseVoice) {
-        utterance.voice = chineseVoice;
-      }
-
-      speechSynthesis.speak(utterance);
-      lastSpeakTime = now;
     }
-
-    window.speechSynthesis.onvoiceschanged = () => {
-      speechSynthesis.getVoices();
-    };
 
     // =========================================================================
     // ⏱️ 3. 动作计时器
@@ -816,11 +788,10 @@
     client.on('message', (_, message) => {
       try {
         const data = JSON.parse(message.toString());
-        console.log("收到MQTT数据:", JSON.stringify(data));
         // 兼容处理不同的 JSON 键名
         const pitch = parseFloat(data.pitch || data.thigh_pitch || 0);
         const roll = parseFloat(data.roll || data.thigh_roll || 0);
-        const ked = parseFloat(data.ked || data.stm_az || 0);
+        const ked = parseFloat(data.ked || 0);
 
         // 更新仪表盘数值
         document.getElementById('val-pitch').textContent = pitch.toFixed(1) + '°';
@@ -845,7 +816,7 @@
             uiState = "standard";
           } else if (absPitch > 65 && absPitch <= 80) {
             feedback = "下蹲角度偏深，若膝盖疼痛请稍稍起身";
-            isCorrect = true; 
+            isCorrect = true;
             uiState = "adjust";
           } else if (absPitch > 80) {
             feedback = "危险！蹲姿过深易致韧带受损，请立即起身";
@@ -857,26 +828,28 @@
             uiState = "neutral";
           }
 
-        } else if (currentMode === 'legraise') { // 2. 直腿抬高 (平躺)
+        } else if (currentMode === 'legraise') { // 2. 直腿抬高 (已根据真实数据修正)
+          // 真实情况：平躺 Pitch 高（~70°+），抬腿后 Pitch 降低
           if (absPitch >= 45 && absPitch <= 65) {
             feedback = "直抬腿动作标准，保持股四头肌紧绷";
             isCorrect = true;
             uiState = "standard";
           } else if (absPitch < 45) {
-            feedback = "抬腿高度不足，请继续抬高";
+            feedback = "抬腿高度过高，易引发腰部代偿，请稍放低";
             isCorrect = false;
             uiState = "danger";
           } else if (absPitch > 70) {
-            feedback = "请平躺放松，准备开始抬腿";
+            feedback = "请绷紧大腿，平稳抬高至合适高度";
             isCorrect = false;
             uiState = "neutral";
           } else {
-            feedback = "角度接近标准，再调整一点";
+            feedback = "继续调整抬腿高度";
             isCorrect = false;
             uiState = "adjust";
           }
 
-        } else if (currentMode === 'stance') { // 3. 单脚支撑 (平躺时 Roll 接近 -90°，以 Pitch 为准)
+        } else if (currentMode === 'stance') { // 3. 单脚支撑 (已根据真实数据修正)
+          // 真实情况：正常站立时 Roll 本身很大（约 -90°），主要看 Pitch 是否稳定
           if (absPitch <= 12) {
             if (absPitch <= 6) {
               feedback = "核心控制极佳，本体感觉平衡优秀";
@@ -895,7 +868,7 @@
 
         } else if (currentMode === 'sideleg') { // 4. 侧抬腿训练
           if (absRoll >= 23 && absRoll <= 45) {
-            if (absPitch <= 12) { // 增加骨盆翻转判定
+            if (absPitch <= 12) {
               feedback = "外展角度合格，臀中肌持续发力";
               isCorrect = true;
               uiState = "standard";
@@ -980,8 +953,8 @@
           plugins: {
             legend: { position: 'top' }
           },
-          scales: {
-            y: { min: -180, max: 180, grid: { color: '#edf2f7' } },
+          scales: { 
+            y: { min: -90, max: 90, grid: { color: '#edf2f7' } },
             x: { grid: { display: false } }
           } 
         }
