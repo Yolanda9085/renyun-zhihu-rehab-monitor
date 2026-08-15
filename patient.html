@@ -803,6 +803,24 @@ function renderCenterStats() {
 }
 renderCenterStats();
 
+// ── 跨标签页同步：医生发布任务后患者端自动刷新 ──────────────
+window.addEventListener('storage', function(e) {
+    if (e.key === DB_KEY) {
+        const freshDB = loadDB();
+        const freshPatient = freshDB.patients.find(x => x.id === DB.currentPatientId);
+        if (freshPatient) {
+            p.tasks = freshPatient.tasks;
+            p.records = freshPatient.records;
+            p.history = freshPatient.history;
+            renderTasks();
+            renderCenterStats();
+            renderCalendar();
+            calcStreak();
+            showToast('📋 收到新的康复任务，请查看！', 'success');
+        }
+    }
+});
+
 // ── Overview view ─────────────────────────────────────────
 function renderOverview() {
     const doneTotal = p.history.filter(h=>h.done).length;
